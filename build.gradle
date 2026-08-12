@@ -17,7 +17,7 @@ repositories {
 dependencies {
     // Minecraft & Fabric dependencies (Using official Mojang Mappings for 26.2)
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
+    mappings loom.noIntermediateMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
