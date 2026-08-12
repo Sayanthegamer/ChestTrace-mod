@@ -10,58 +10,91 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 public final class ChestLogRollback {
-
-    private static final Logger LOGGER = LoggerFactory.getLogger("ChestLoggerRollback");
-
     private ChestLogRollback() {}
 
     public record Result(
-            boolean success,
-            String errorMessage,
-            int transactionCount,
-            int eventCount,
-            int restoredItems,
-            int removedItems,
-            int droppedItems
+        boolean success,
+        String errorMessage,
+        int restoredItems,
+        int removedItems,
+        int droppedItems,
+        int transactionCount
     ) {
-        public static Result failure(String errorMessage) {
-            return new Result(false, errorMessage, 0, 0, 0, 0, 0);
-        }
-
-        public static Result success(int transactionCount, int eventCount, int restoredItems, int removedItems, int droppedItems) {
-            return new Result(true, null, transactionCount, eventCount, restoredItems, removedItems, droppedItems);
+        public static Result failure(String msg) {
+            return new Result(false, msg, 0, 0, 0, 0);
         }
     }
 
-    public static Result rollback(
-            ServerLevel world,
-            BlockPos targetPos,
-            List<ChestLogEvent> events,
-            long cutoffMillis
-    ) {
-        BlockEntity blockEntity = world.getBlockEntity(targetPos);
+    private static String getItemIdentifier(Item item) {
+        if (item == null) return "minecraft:air";
+        try {
+            Object loc = BuiltInRegistries.ITEM.getKey(item);
+            if (loc != null) return loc.toString();
+        } catch (Throwable t) {
+            try {
+                for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
+                    if (m.getName().equals("getKey") && m.getParameterCount() == 1) {
+                        Object res = m.invoke(BuiltInRegistries.ITEM, item);
+                        if (res != null) return res.toString();
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return item.toString();
+    }
+
+    private static Item getItemFromIdentifier(ResourceLocation id) {
+        if (id == null) return null;
+        try {
+            return BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
+        } catch (Throwable t) {
+            try {
+                for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
+                    if (m.getName().equals("get") || m.getName().equals("getValue") || m.getName().equals("getOptional")) {
+                        if (m.getParameterCount() == 1 && m.getParameterTypes()[0] == ResourceLocation.class) {
+                            Object res = m.invoke(BuiltInRegistries.ITEM, id);
+                            if (res instanceof Item item) return item;
+                            if (res instanceof java.util.Optional opt) {
+                                Object inner = opt.orElse(null);
+                                if (inner instanceof net.minecraft.core.Holder h) {
+                                    return (Item) h.value();
+                                }
+                                if (inner instanceof Item item) return item;
+                            }
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
+    }
+
+    public static Result rollback(ServerLevel world, BlockPos pos, List<ChestLogEvent> events, long cutoffMillis) {
+        BlockEntity blockEntity = world.getBlockEntity(pos);
         if (!(blockEntity instanceof Container inventory)) {
-            return Result.failure("Target block is not a valid container inventory at " + targetPos.toShortString());
+            return Result.failure("Target block at " + pos.toShortString() + " is not a valid inventory container.");
         }
 
-        // --- PHASE 1: Group events by Tx ID & aggregate net inverse deltas ---
+        // --- PHASE 1: Calculate Net Inverse Differences ---
         Map<Long, Map<String, Integer>> inverseByTransaction = new LinkedHashMap<>();
         int eventCount = 0;
 
         for (ChestLogEvent event : events) {
-            if (event.packedBlockPos != targetPos.asLong() || event.timestampMillis < cutoffMillis || event.isAdminEvent()) {
-                continue;
-            }
+            if (event.timestampMillis < cutoffMillis) continue;
+            if (event.isRollbackAudit()) continue; // Ignore past admin rollbacks
 
-            inverseByTransaction
-                    .computeIfAbsent(event.transactionId, k -> new LinkedHashMap<>())
-                    .merge(event.itemId, -(int) event.countDiff, Integer::sum);
+            Map<String, Integer> txMap = inverseByTransaction.computeIfAbsent(
+                event.transactionId, k -> new LinkedHashMap<>()
+            );
+
+            // Invert the log diff: if original event was -X (removed), we add +X back.
+            // If original event was +X (added), we subtract -X.
+            int inverseDiff = -event.countDiff;
+            txMap.merge(event.itemId, inverseDiff, Integer::sum);
 
             eventCount++;
         }
@@ -86,7 +119,7 @@ public final class ChestLogRollback {
             originalLiveSlots[i] = stack.copy(); 
             virtualSlots[i] = stack.copy();
             if (!stack.isEmpty()) {
-                String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
+                String itemId = getItemIdentifier(stack.getItem());
                 availableCounts.merge(itemId, stack.getCount(), Integer::sum);
             }
         }
@@ -100,7 +133,7 @@ public final class ChestLogRollback {
 
             ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
             if (id == null) return Result.failure("Unresolvable Item Identifier: " + entry.getKey());
-            Item item = BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
+            Item item = getItemFromIdentifier(id);
             if (item == null) return Result.failure("Item missing from Registry: " + entry.getKey());
 
             if (netInverse < 0) {
@@ -115,104 +148,107 @@ public final class ChestLogRollback {
             }
         }
 
-        // --- PHASE 3: Virtual Simulation Workspace ---
-        int restored = 0;
-        int removed = 0;
-        int dropped = 0;
-        List<ItemStack> pendingWorldDrops = new ArrayList<>();
-
+        // --- PHASE 3: Virtual Slot Simulation ---
+        // 3a. Remove items virtually
         for (Map.Entry<Item, Integer> entry : toRemove.entrySet()) {
             Item item = entry.getKey();
-            int remainingToRemove = entry.getValue();
-
-            for (int i = 0; i < invSize && remainingToRemove > 0; i++) {
+            int amountRemaining = entry.getValue();
+            for (int i = 0; i < invSize && amountRemaining > 0; i++) {
                 ItemStack stack = virtualSlots[i];
-                if (stack.isEmpty() || stack.getItem() != item) continue;
-
-                int take = Math.min(stack.getCount(), remainingToRemove);
-                stack.shrink(take);
-                if (stack.isEmpty()) virtualSlots[i] = ItemStack.EMPTY;
-                remainingToRemove -= take;
-                removed += take;
+                if (stack.is(item)) {
+                    int toTake = Math.min(stack.getCount(), amountRemaining);
+                    stack.shrink(toTake);
+                    amountRemaining -= toTake;
+                }
+            }
+            if (amountRemaining > 0) {
+                return Result.failure("Preflight Failed: Virtual slot removal mismatch for " + item);
             }
         }
+
+        // 3b. Add items virtually
+        int restoredCount = 0;
+        int droppedCount = 0;
 
         for (Map.Entry<Item, Integer> entry : toRestore.entrySet()) {
             Item item = entry.getKey();
-            int remainingToRestore = entry.getValue();
+            int amountToAdd = entry.getValue();
+            restoredCount += amountToAdd;
 
-            for (int i = 0; i < invSize && remainingToRestore > 0; i++) {
+            // Fill existing partial stacks first
+            for (int i = 0; i < invSize && amountToAdd > 0; i++) {
                 ItemStack stack = virtualSlots[i];
-                if (stack.isEmpty() || stack.getItem() != item) continue;
-
-                int max = Math.min(stack.getMaxStackSize(), inventory.getMaxStackSize());
-                int freeSpace = max - stack.getCount();
-                if (freeSpace <= 0) continue;
-
-                int insert = Math.min(freeSpace, remainingToRestore);
-                stack.grow(insert);
-                remainingToRestore -= insert;
-                restored += insert;
+                if (stack.is(item) && stack.getCount() < stack.getMaxStackSize()) {
+                    int space = stack.getMaxStackSize() - stack.getCount();
+                    int toAdd = Math.min(space, amountToAdd);
+                    stack.grow(toAdd);
+                    amountToAdd -= toAdd;
+                }
             }
 
-            for (int i = 0; i < invSize && remainingToRestore > 0; i++) {
-                if (!virtualSlots[i].isEmpty()) continue;
-
-                int insert = Math.min(item.getDefaultInstance().getMaxStackSize(), remainingToRestore);
-                virtualSlots[i] = new ItemStack(item, insert);
-                remainingToRestore -= insert;
-                restored += insert;
+            // Fill empty slots next
+            for (int i = 0; i < invSize && amountToAdd > 0; i++) {
+                ItemStack stack = virtualSlots[i];
+                if (stack.isEmpty()) {
+                    int toAdd = Math.min(item.getDefaultMaxStackSize(), amountToAdd);
+                    virtualSlots[i] = new ItemStack(item, toAdd);
+                    amountToAdd -= toAdd;
+                }
             }
 
-            while (remainingToRestore > 0) {
-                int dropCount = Math.min(item.getDefaultInstance().getMaxStackSize(), remainingToRestore);
-                pendingWorldDrops.add(new ItemStack(item, dropCount));
-                remainingToRestore -= dropCount;
-                dropped += dropCount;
+            // Excess items overflow onto ground
+            if (amountToAdd > 0) {
+                droppedCount += amountToAdd;
             }
         }
 
-        // --- PHASE 4: COMPENSATING COMMIT WITH DOUBLE-FAULT RECOVERY ---
-        List<ItemEntity> spawnedEntities = new ArrayList<>();
+        int removedCount = toRemove.values().stream().mapToInt(Integer::intValue).sum();
+
+        // --- PHASE 4: Transactional Commit to Live Inventory ---
         try {
             for (int i = 0; i < invSize; i++) {
                 inventory.setItem(i, virtualSlots[i]);
             }
             inventory.setChanged();
 
-            for (ItemStack dropStack : pendingWorldDrops) {
-                ItemEntity entity = new ItemEntity(world,
-                        targetPos.getX() + 0.5,
-                        targetPos.getY() + 1.0,
-                        targetPos.getZ() + 0.5,
-                        dropStack);
-                if (world.addFreshEntity(entity)) {
-                    spawnedEntities.add(entity);
-                } else {
-                    throw new IllegalStateException("Engine rejected ItemEntity spawn at " + targetPos.toShortString());
+            // Spawn overflow items in world safely
+            if (droppedCount > 0) {
+                double dropX = pos.getX() + 0.5;
+                double dropY = pos.getY() + 1.0;
+                double dropZ = pos.getZ() + 0.5;
+                for (Map.Entry<Item, Integer> entry : toRestore.entrySet()) {
+                    Item item = entry.getKey();
+                    int overflow = entry.getValue();
+                    while (overflow > 0) {
+                        int stackSize = Math.min(item.getDefaultMaxStackSize(), overflow);
+                        ItemStack dropStack = new ItemStack(item, stackSize);
+                        ItemEntity entity = new ItemEntity(world, dropX, dropY, dropZ, dropStack);
+                        entity.setDefaultPickUpDelay();
+                        world.addFreshEntity(entity);
+                        overflow -= stackSize;
+                    }
                 }
             }
-        } catch (Throwable commitError) {
-            LOGGER.error("ChestLogger: commit failed; initiating best-effort compensation", commitError);
-            boolean revertSucceeded = true;
-            for (int i = 0; i < invSize; i++) {
-                try { inventory.setItem(i, originalLiveSlots[i]); }
-                catch (Throwable doubleFault) {
-                    revertSucceeded = false;
-                    LOGGER.error("ChestLogger: DOUBLE FAULT reverting slot " + i, doubleFault);
-                }
-            }
-            try { inventory.setChanged(); } catch (Throwable ignored) {}
-            for (ItemEntity entity : spawnedEntities) {
-                try { entity.discard(); } catch (Throwable ignored) {}
-            }
-            if (!revertSucceeded) {
-                return Result.failure("CRITICAL PANIC: commit failed and inventory compensation failed at " + targetPos.toShortString() + ". Manual admin inspection required.");
-            }
-            String reason = commitError.getMessage() == null ? commitError.getClass().getSimpleName() : commitError.getMessage();
-            return Result.failure("Rollback failed mid-commit. Best-effort inventory compensation and entity cleanup completed: " + reason);
-        }
 
-        return Result.success(inverseByTransaction.size(), eventCount, restored, removed, dropped);
+            return new Result(
+                true,
+                null,
+                restoredCount,
+                removedCount,
+                droppedCount,
+                inverseByTransaction.size()
+            );
+        } catch (Throwable commitError) {
+            // ROLLBACK / REVERT ALL MUTATIONS TO SNAPSHOT
+            try {
+                for (int i = 0; i < invSize; i++) {
+                    inventory.setItem(i, originalLiveSlots[i]);
+                }
+                inventory.setChanged();
+            } catch (Throwable rollbackError) {
+                ChestLoggerMod.LOGGER.error("CRITICAL: Failed to revert live snapshot after commit error!", rollbackError);
+            }
+            return Result.failure("Transactional Commit Exception: " + commitError.getMessage());
+        }
     }
 }

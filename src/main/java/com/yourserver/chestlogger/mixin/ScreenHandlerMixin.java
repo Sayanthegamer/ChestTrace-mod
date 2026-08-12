@@ -11,6 +11,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
@@ -55,11 +56,11 @@ public abstract class ScreenHandlerMixin {
         // Determine if items are being removed from or added to the chest
         if (!slotStack.isEmpty()) {
             // Taking from chest slot
-            itemId = BuiltInRegistries.ITEM.getKey(slotStack.getItem()).toString();
+            itemId = getItemIdentifier(slotStack.getItem());
             countDiff = -slotStack.getCount();
         } else if (carriedStack != null && !carriedStack.isEmpty()) {
             // Placing into empty chest slot
-            itemId = BuiltInRegistries.ITEM.getKey(carriedStack.getItem()).toString();
+            itemId = getItemIdentifier(carriedStack.getItem());
             countDiff = carriedStack.getCount();
         }
 
@@ -78,6 +79,24 @@ public abstract class ScreenHandlerMixin {
             countDiff,
             flags
         ));
+    }
+
+    private String getItemIdentifier(Item item) {
+        if (item == null) return "minecraft:air";
+        try {
+            Object loc = BuiltInRegistries.ITEM.getKey(item);
+            if (loc != null) return loc.toString();
+        } catch (Throwable t) {
+            try {
+                for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
+                    if (m.getName().equals("getKey") && m.getParameterCount() == 1) {
+                        Object res = m.invoke(BuiltInRegistries.ITEM, item);
+                        if (res != null) return res.toString();
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return item.toString();
     }
 
     private BlockPos getBlockPosFromContainer(Container container) {
