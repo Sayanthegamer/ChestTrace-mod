@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.7.4'
+    id 'fabric-loom' version '1.17-SNAPSHOT'
     id 'maven-publish'
 }
 
@@ -15,7 +15,7 @@ repositories {
 }
 
 dependencies {
-    // Minecraft & Fabric dependencies (Using official Mojang Mappings per Context7 docs)
+    // Minecraft & Fabric dependencies (Using official Mojang Mappings for MC 26.2)
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
     mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
