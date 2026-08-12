@@ -15,9 +15,9 @@ repositories {
 }
 
 dependencies {
-    // Minecraft & Fabric dependencies for unobfuscated MC 26.2
+    // Minecraft & Fabric dependencies (Using official Mojang Mappings per Context7 docs)
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings files("src/main/mappings/empty.tiny")
+    mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
@@ -48,4 +48,8 @@ jar {
     from("LICENSE") {
         rename "${it}_${base.archivesName.get()}", "${it}"
     }
+}
+
+remapJar {
+    targetNamespace = 'named'
 }

@@ -7,7 +7,7 @@ import com.yourserver.chestlogger.logging.TransactionIdGenerator;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ContainerInput;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -19,8 +19,19 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(AbstractContainerMenu.class)
 public abstract class ScreenHandlerMixin {
 
-    @Inject(method = "doClick", at = @At("HEAD"))
-    private void onSlotClickIntercept(int slotIndex, int button, ContainerInput clickType, Player player, CallbackInfo ci) {
+    // Target for Minecraft 1.21.x: explicit ClickType method signature with require = 0
+    @Inject(method = "doClick(IILnet/minecraft/world/inventory/ClickType;Lnet/minecraft/world/entity/player/Player;)V", at = @At("HEAD"), require = 0)
+    private void onSlotClickLegacy(int slotIndex, int button, ClickType clickType, Player player, CallbackInfo ci) {
+        handleSlotClick(slotIndex, button, clickType, player);
+    }
+
+    // Target for Minecraft 26.2: explicit ContainerInput method signature with require = 0
+    @Inject(method = "doClick(IILnet/minecraft/world/inventory/ContainerInput;Lnet/minecraft/world/entity/player/Player;)V", at = @At("HEAD"), require = 0, remap = false)
+    private void onSlotClick26(int slotIndex, int button, Object clickType, Player player, CallbackInfo ci) {
+        handleSlotClick(slotIndex, button, clickType, player);
+    }
+
+    private void handleSlotClick(int slotIndex, int button, Object clickTypeObj, Player player) {
         ChestLogWriter writer = ChestLoggerMod.writer();
         if (writer == null || writer.isDisabled()) return;
         if (slotIndex < 0) return;
@@ -35,7 +46,7 @@ public abstract class ScreenHandlerMixin {
         if (stack.isEmpty()) return;
 
         byte flags = 0;
-        String clickStr = clickType != null ? clickType.toString() : "";
+        String clickStr = clickTypeObj != null ? clickTypeObj.toString() : "";
         if (clickStr.contains("QUICK_MOVE")) {
             flags |= ChestLogEvent.Flags.SHIFT_CLICK;
         } else if (clickStr.contains("QUICK_CRAFT") || clickStr.contains("DRAG")) {
