@@ -4,7 +4,10 @@ import com.yourserver.chestlogger.ChestLoggerMod;
 import com.yourserver.chestlogger.logging.ChestLogEvent;
 import com.yourserver.chestlogger.logging.ChestLogWriter;
 import com.yourserver.chestlogger.logging.TransactionIdGenerator;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.CompoundContainer;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
@@ -29,12 +32,19 @@ public abstract class ScreenHandlerMixin {
         if (slotIndex >= menu.slots.size()) return;
 
         Slot slot = menu.slots.get(slotIndex);
-        if (slot == null || !(slot.container instanceof BlockEntity blockEntity)) return;
+        if (slot == null) return;
 
-        ItemStack stack = slot.getItem();
-        if (stack.isEmpty()) return;
+        Container container = slot.container;
+        BlockPos pos = getBlockPosFromContainer(container);
+        if (pos == null) return;
 
+        ItemStack slotStack = slot.getItem();
+        ItemStack carriedStack = menu.getCarried();
+
+        String itemId = null;
+        int countDiff = 0;
         byte flags = 0;
+
         String clickStr = clickType != null ? clickType.toString() : "";
         if (clickStr.contains("QUICK_MOVE")) {
             flags |= ChestLogEvent.Flags.SHIFT_CLICK;
@@ -42,20 +52,46 @@ public abstract class ScreenHandlerMixin {
             flags |= ChestLogEvent.Flags.DRAG;
         }
 
-        String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-        long packedPos = blockEntity.getBlockPos().asLong();
+        // Determine if items are being removed from or added to the chest
+        if (!slotStack.isEmpty()) {
+            // Taking from chest slot
+            itemId = BuiltInRegistries.ITEM.getKey(slotStack.getItem()).toString();
+            countDiff = -slotStack.getCount();
+        } else if (carriedStack != null && !carriedStack.isEmpty()) {
+            // Placing into empty chest slot
+            itemId = BuiltInRegistries.ITEM.getKey(carriedStack.getItem()).toString();
+            countDiff = carriedStack.getCount();
+        }
+
+        if (itemId == null || countDiff == 0) return;
+
+        long packedPos = pos.asLong();
         long timestamp = System.currentTimeMillis();
         long txId = TransactionIdGenerator.next();
 
-        // Enqueue event 100% lock-free
         writer.enqueue(new ChestLogEvent(
             timestamp,
             txId,
             player.getUUID(),
             packedPos,
             itemId,
-            -stack.getCount(),
+            countDiff,
             flags
         ));
+    }
+
+    private BlockPos getBlockPosFromContainer(Container container) {
+        if (container instanceof BlockEntity be) {
+            return be.getBlockPos();
+        }
+        if (container instanceof CompoundContainer cc) {
+            if (cc.container1 instanceof BlockEntity be1) {
+                return be1.getBlockPos();
+            }
+            if (cc.container2 instanceof BlockEntity be2) {
+                return be2.getBlockPos();
+            }
+        }
+        return null;
     }
 }
