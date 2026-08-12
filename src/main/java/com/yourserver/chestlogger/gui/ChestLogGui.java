@@ -96,7 +96,14 @@ public final class ChestLogGui implements MenuProvider {
     @Override
     public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
         ChestMenu menu = ChestMenu.sixRows(syncId, playerInventory);
-        populateMenu(menu, player);
+        try {
+            populateMenu(menu, player);
+        } catch (Throwable t) {
+            ChestLoggerMod.LOGGER.error("Error populating ChestLogGui container slots", t);
+            if (player instanceof ServerPlayer sp) {
+                sp.sendSystemMessage(Component.literal("§c[ChestLogger] GUI Populate Error: " + t.getMessage()));
+            }
+        }
         return menu;
     }
 
@@ -120,7 +127,7 @@ public final class ChestLogGui implements MenuProvider {
                 int slotIndex = i - start;
 
                 Item item = getItemFromIdentifier(ResourceLocation.tryParse(entry.itemId()));
-                if (item == null) item = Items.BARRIER;
+                if (item == null || item == Items.AIR) item = Items.BARRIER;
 
                 int displayCount = Math.min(64, Math.max(1, Math.abs(entry.netCountDiff())));
                 ItemStack icon = new ItemStack(item, displayCount);
@@ -136,8 +143,12 @@ public final class ChestLogGui implements MenuProvider {
                 lore.add(Component.literal("§7Latest: §f" + df.format(new Date(entry.latestTimestamp()))));
                 lore.add(Component.literal("§7Events Merged: §f" + entry.eventCount()));
 
-                icon.set(DataComponents.CUSTOM_NAME, customName);
-                icon.set(DataComponents.LORE, new ItemLore(lore));
+                try {
+                    icon.set(DataComponents.CUSTOM_NAME, customName);
+                    icon.set(DataComponents.LORE, new ItemLore(lore));
+                } catch (Throwable t) {
+                    ChestLoggerMod.LOGGER.warn("Failed to set item components for " + item, t);
+                }
 
                 menu.getContainer().setItem(slotIndex, icon);
             }
@@ -155,7 +166,7 @@ public final class ChestLogGui implements MenuProvider {
                 int slotIndex = i - start;
 
                 Item item = getItemFromIdentifier(ResourceLocation.tryParse(e.itemId));
-                if (item == null) item = Items.BARRIER;
+                if (item == null || item == Items.AIR) item = Items.BARRIER;
 
                 int displayCount = Math.min(64, Math.max(1, Math.abs(e.countDiff)));
                 ItemStack icon = new ItemStack(item, displayCount);
@@ -171,8 +182,12 @@ public final class ChestLogGui implements MenuProvider {
                 lore.add(Component.literal("§7Time: §f" + df.format(new Date(e.timestampMillis))));
                 lore.add(Component.literal("§8Tx ID: #" + e.transactionId));
 
-                icon.set(DataComponents.CUSTOM_NAME, customName);
-                icon.set(DataComponents.LORE, new ItemLore(lore));
+                try {
+                    icon.set(DataComponents.CUSTOM_NAME, customName);
+                    icon.set(DataComponents.LORE, new ItemLore(lore));
+                } catch (Throwable t) {
+                    ChestLoggerMod.LOGGER.warn("Failed to set raw item components for " + item, t);
+                }
 
                 menu.getContainer().setItem(slotIndex, icon);
             }
@@ -181,24 +196,32 @@ public final class ChestLogGui implements MenuProvider {
         // --- Bottom Control Bar (Slots 45 to 53) ---
         // Slot 45: Previous Page
         ItemStack prevBtn = new ItemStack(Items.PAPER);
-        prevBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Previous Page ]"));
+        try {
+            prevBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Previous Page ]"));
+        } catch (Throwable ignored) {}
         menu.getContainer().setItem(45, prevBtn);
 
         // Slot 48: Mode Toggle
         ItemStack modeBtn = new ItemStack(Items.BOOK);
-        modeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
-        modeBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to toggle between aggregated summary and raw click logs."))));
+        try {
+            modeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
+            modeBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to toggle between aggregated summary and raw click logs."))));
+        } catch (Throwable ignored) {}
         menu.getContainer().setItem(48, modeBtn);
 
         // Slot 49: Rollback Button
         ItemStack rollbackBtn = new ItemStack(Items.ANVIL);
-        rollbackBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[ Rollback Chest (5m) ]"));
-        rollbackBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to execute an instant 5-minute rollback on this chest."))));
+        try {
+            rollbackBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[ Rollback Chest (5m) ]"));
+            rollbackBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to execute an instant 5-minute rollback on this chest."))));
+        } catch (Throwable ignored) {}
         menu.getContainer().setItem(49, rollbackBtn);
 
         // Slot 53: Next Page
         ItemStack nextBtn = new ItemStack(Items.PAPER);
-        nextBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Next Page ]"));
+        try {
+            nextBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Next Page ]"));
+        } catch (Throwable ignored) {}
         menu.getContainer().setItem(53, nextBtn);
     }
 
@@ -255,27 +278,28 @@ public final class ChestLogGui implements MenuProvider {
     }
 
     private Item getItemFromIdentifier(ResourceLocation id) {
-        if (id == null) return Items.AIR;
+        if (id == null) return Items.BARRIER;
         try {
-            return BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(Items.AIR);
+            Item item = BuiltInRegistries.ITEM.getValue(id);
+            if (item != null && item != Items.AIR) return item;
         } catch (Throwable t) {
             try {
                 for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
-                    if (m.getName().equals("get") || m.getName().equals("getValue") || m.getName().equals("getOptional")) {
-                        if (m.getParameterCount() == 1 && m.getParameterTypes()[0] == ResourceLocation.class) {
-                            Object res = m.invoke(BuiltInRegistries.ITEM, id);
-                            if (res instanceof Item item) return item;
-                            if (res instanceof java.util.Optional opt) {
-                                Object inner = opt.orElse(null);
-                                if (inner instanceof net.minecraft.core.Holder h) return (Item) h.value();
-                                if (inner instanceof Item item) return item;
-                            }
+                    if ((m.getName().equals("get") || m.getName().equals("getValue") || m.getName().equals("getOptional"))
+                            && m.getParameterCount() == 1
+                            && m.getParameterTypes()[0] == ResourceLocation.class) {
+                        Object res = m.invoke(BuiltInRegistries.ITEM, id);
+                        if (res instanceof Item item) return item;
+                        if (res instanceof java.util.Optional opt) {
+                            Object inner = opt.orElse(null);
+                            if (inner instanceof net.minecraft.core.Holder h) return (Item) h.value();
+                            if (inner instanceof Item item) return item;
                         }
                     }
                 }
             } catch (Throwable ignored) {}
         }
-        return Items.AIR;
+        return Items.BARRIER;
     }
 
     private String getItemDisplayName(Item item) {
