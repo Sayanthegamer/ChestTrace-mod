@@ -14,11 +14,6 @@ repositories {
     mavenCentral()
 }
 
-loom {
-    // Target official Mojang names for production JAR (required for unobfuscated MC 26.2 client/server)
-    productionNamespace = 'official'
-}
-
 dependencies {
     // Minecraft & Fabric dependencies (Using official Mojang Mappings per Context7 docs)
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
@@ -53,4 +48,8 @@ jar {
     from("LICENSE") {
         rename "${it}_${base.archivesName.get()}", "${it}"
     }
+}
+
+remapJar {
+    targetNamespace = 'named'
 }
