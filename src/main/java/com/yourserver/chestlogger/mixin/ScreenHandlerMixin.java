@@ -69,7 +69,7 @@ public abstract class ScreenHandlerMixin {
         int countDiff = 0;
         byte flags = 0;
 
-        String clickStr = clickType != null ? clickType.name() : "";
+        String clickStr = clickType != null ? clickType.toString() : "";
         if (clickStr.contains("QUICK_MOVE")) {
             flags |= ChestLogEvent.Flags.SHIFT_CLICK;
         } else if (clickStr.contains("QUICK_CRAFT") || clickStr.contains("DRAG")) {
