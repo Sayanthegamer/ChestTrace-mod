@@ -5,6 +5,7 @@ import com.yourserver.chestlogger.logging.ChestLogWriter;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.loader.api.FabricLoader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,7 +23,7 @@ public final class ChestLoggerMod implements ModInitializer {
         LOGGER.info("Initializing ChestLogger Mod...");
 
         ServerLifecycleEvents.SERVER_STARTING.register(server -> {
-            LOG_DIRECTORY = server.getRunDir().resolve("chestlogger");
+            LOG_DIRECTORY = FabricLoader.getInstance().getGameDir().resolve("chestlogger");
             // Flush threshold: 5000 events, flush interval: 12000 ms (12 sec), retention: 30 days
             WRITER = new ChestLogWriter(LOG_DIRECTORY, 5000, 12000L, 30);
             WRITER.start();
