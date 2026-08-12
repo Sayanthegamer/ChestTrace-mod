@@ -7,7 +7,7 @@ import com.yourserver.chestlogger.logging.TransactionIdGenerator;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
-import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerInput;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -20,7 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ScreenHandlerMixin {
 
     @Inject(method = "doClick", at = @At("HEAD"))
-    private void onSlotClickIntercept(int slotIndex, int button, ClickType clickType, Player player, CallbackInfo ci) {
+    private void onSlotClickIntercept(int slotIndex, int button, ContainerInput clickType, Player player, CallbackInfo ci) {
         ChestLogWriter writer = ChestLoggerMod.writer();
         if (writer == null || writer.isDisabled()) return;
         if (slotIndex < 0) return;
@@ -35,9 +35,10 @@ public abstract class ScreenHandlerMixin {
         if (stack.isEmpty()) return;
 
         byte flags = 0;
-        if (clickType == ClickType.QUICK_MOVE) {
+        String clickStr = clickType != null ? clickType.toString() : "";
+        if (clickStr.contains("QUICK_MOVE")) {
             flags |= ChestLogEvent.Flags.SHIFT_CLICK;
-        } else if (clickType == ClickType.QUICK_CRAFT) {
+        } else if (clickStr.contains("QUICK_CRAFT") || clickStr.contains("DRAG")) {
             flags |= ChestLogEvent.Flags.DRAG;
         }
 
