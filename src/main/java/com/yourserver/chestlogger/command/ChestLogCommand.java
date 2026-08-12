@@ -3,6 +3,7 @@ package com.yourserver.chestlogger.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.yourserver.chestlogger.ChestLoggerMod;
+import com.yourserver.chestlogger.gui.ChestLogGui;
 import com.yourserver.chestlogger.logging.ChestLogEvent;
 import com.yourserver.chestlogger.logging.ChestLogReader;
 import com.yourserver.chestlogger.logging.ChestLogWriter;
@@ -13,6 +14,7 @@ import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
@@ -50,25 +52,36 @@ public final class ChestLogCommand {
                 .executes(ctx -> {
                     CommandSourceStack source = ctx.getSource();
                     BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
-                    long packedPos = pos.asLong();
-                    Path logDir = ChestLoggerMod.logDirectory();
-                    source.sendSuccess(() -> Component.literal("§7[ChestLogger] Inspecting " + pos.toShortString() + "..."), false);
-                    CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, ChestLoggerMod.writer(), packedPos))
-                        .thenAcceptAsync(q -> {
-                            if (!q.isComplete()) {
-                                source.sendFailure(Component.literal("§c[ChestLogger] Historical read incomplete. Failed segments: " + q.failedSegments().size()));
-                            }
-                            SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
-                            for (ChestLogEvent e : q.events()) {
-                                String action = e.countDiff > 0 ? "§a+ " + e.countDiff : "§c" + e.countDiff;
-                                source.sendSuccess(() -> Component.literal(String.format("§8[%s] §7Player: §f%s §7| %s §7item: §f%s §8(Tx: %d)",
-                                    df.format(new Date(e.timestampMillis)),
-                                    e.playerId == null ? "unknown" : e.playerId.toString().substring(0, 8),
-                                    action, e.itemId, e.transactionId)), false);
-                            }
-                        }, source.getServer());
+                    if (source.getEntity() instanceof ServerPlayer player) {
+                        ChestLogGui.open(player, pos);
+                    } else {
+                        source.sendFailure(Component.literal("§c[ChestLogger] GUI inspect command must be executed by a player in-game."));
+                    }
                     return 1;
-                }));
+                })
+                .then(Commands.literal("chat")
+                    .executes(ctx -> {
+                        CommandSourceStack source = ctx.getSource();
+                        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
+                        long packedPos = pos.asLong();
+                        Path logDir = ChestLoggerMod.logDirectory();
+                        source.sendSuccess(() -> Component.literal("§7[ChestLogger] Inspecting " + pos.toShortString() + "..."), false);
+                        CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, ChestLoggerMod.writer(), packedPos))
+                            .thenAcceptAsync(q -> {
+                                if (!q.isComplete()) {
+                                    source.sendFailure(Component.literal("§c[ChestLogger] Historical read incomplete. Failed segments: " + q.failedSegments().size()));
+                                }
+                                SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
+                                for (ChestLogEvent e : q.events()) {
+                                    String action = e.countDiff > 0 ? "§a+ " + e.countDiff : "§c" + e.countDiff;
+                                    source.sendSuccess(() -> Component.literal(String.format("§8[%s] §7Player: §f%s §7| %s §7item: §f%s §8(Tx: %d)",
+                                        df.format(new Date(e.timestampMillis)),
+                                        e.playerId == null ? "unknown" : e.playerId.toString().substring(0, 8),
+                                        action, e.itemId, e.transactionId)), false);
+                                }
+                            }, source.getServer());
+                        return 1;
+                    })));
 
         var rollbackNode = Commands.literal("rollback")
             .then(Commands.argument("pos", BlockPosArgument.blockPos())
@@ -111,7 +124,7 @@ public final class ChestLogCommand {
                                 } else {
                                     source.sendSuccess(() -> Component.literal(String.format("§a[ChestLogger] Rollback committed: %d restored, %d removed, %d dropped (%d txs). Audit queued.", result.restoredItems(), result.removedItems(), result.droppedItems(), result.transactionCount())), true);
                                 }
-                                }, world.getServer());
+                            }, world.getServer());
                         return 1;
                     })));
 
