@@ -46,6 +46,10 @@ public final class ChestLogGui implements MenuProvider {
     }
 
     public static void open(ServerPlayer player, BlockPos pos) {
+        if (ChestLoggerMod.writer() == null) {
+            player.sendSystemMessage(Component.literal("§c[ChestLogger] Error: Engine writer is not initialized."));
+            return;
+        }
         long packedPos = pos.asLong();
         Path logDir = ChestLoggerMod.logDirectory();
         player.sendSystemMessage(Component.literal("§7[ChestLogger] Loading history GUI for " + pos.toShortString() + "..."));
@@ -95,7 +99,8 @@ public final class ChestLogGui implements MenuProvider {
 
     @Override
     public AbstractContainerMenu createMenu(int syncId, Inventory playerInventory, Player player) {
-        ChestMenu menu = ChestMenu.sixRows(syncId, playerInventory);
+        net.minecraft.world.SimpleContainer container = new net.minecraft.world.SimpleContainer(54);
+        ChestLogMenu menu = new ChestLogMenu(syncId, playerInventory, container, this);
         try {
             populateMenu(menu, player);
         } catch (Throwable t) {

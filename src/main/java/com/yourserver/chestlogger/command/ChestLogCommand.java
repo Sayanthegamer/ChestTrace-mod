@@ -48,6 +48,21 @@ public final class ChestLogCommand {
             });
 
         var inspectNode = Commands.literal("inspect")
+            .executes(ctx -> {
+                CommandSourceStack source = ctx.getSource();
+                if (source.getEntity() instanceof ServerPlayer player) {
+                    net.minecraft.world.phys.HitResult hit = player.pick(5.0D, 0.0F, false);
+                    if (hit instanceof net.minecraft.world.phys.BlockHitResult blockHit && hit.getType() == net.minecraft.world.phys.HitResult.Type.BLOCK) {
+                        BlockPos pos = blockHit.getBlockPos();
+                        ChestLogGui.open(player, pos);
+                    } else {
+                        source.sendFailure(Component.literal("§c[ChestLogger] No block targeted. Look at a chest or specify coordinates: /chestlog inspect <x> <y> <z>"));
+                    }
+                } else {
+                    source.sendFailure(Component.literal("§c[ChestLogger] GUI inspect command must be executed by a player in-game."));
+                }
+                return 1;
+            })
             .then(Commands.argument("pos", BlockPosArgument.blockPos())
                 .executes(ctx -> {
                     CommandSourceStack source = ctx.getSource();

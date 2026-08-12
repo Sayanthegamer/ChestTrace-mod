@@ -2,6 +2,7 @@ package com.yourserver.chestlogger.mixin;
 
 import com.yourserver.chestlogger.ChestLoggerMod;
 import com.yourserver.chestlogger.gui.ChestLogGui;
+import com.yourserver.chestlogger.gui.ChestLogMenu;
 import com.yourserver.chestlogger.logging.ChestLogEvent;
 import com.yourserver.chestlogger.logging.ChestLogWriter;
 import com.yourserver.chestlogger.logging.TransactionIdGenerator;
@@ -13,37 +14,33 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(AbstractContainerMenu.class)
 public abstract class ScreenHandlerMixin {
 
-    @Inject(method = "doClick", at = @At("HEAD"), cancellable = true)
-    private void onSlotClickIntercept(int slotIndex, int button, @Coerce Object clickType, Player player, CallbackInfo ci) {
+    @Inject(method = "clicked", at = @At("HEAD"), cancellable = true)
+    private void onSlotClickIntercept(int slotIndex, int button, ClickType clickType, Player player, CallbackInfo ci) {
         AbstractContainerMenu menu = (AbstractContainerMenu) (Object) this;
 
-        // --- GUI Click Protection & Control Handling for ChestLogGui ---
-        if (menu instanceof ChestMenu chestMenu) {
-            Container c = chestMenu.getContainer();
-            if (c.getContainerSize() >= 54) {
-                ItemStack modeItem = c.getItem(48);
-                if (!modeItem.isEmpty() && modeItem.getHoverName() != null && modeItem.getHoverName().getString().contains("[ Mode:")) {
-                    if (player instanceof ServerPlayer serverPlayer) {
-                        // Protect items and process GUI button actions
-                        handleGuiClick(slotIndex, serverPlayer, chestMenu);
-                    }
-                    ci.cancel();
-                    return;
+        // --- GUI Click Protection & Control Handling for ChestLogMenu ---
+        if (menu instanceof ChestLogMenu chestLogMenu) {
+            if (player instanceof ServerPlayer serverPlayer) {
+                ChestLogGui gui = chestLogMenu.getGui();
+                if (gui != null) {
+                    gui.handleControlClick(slotIndex, serverPlayer, chestLogMenu);
                 }
             }
+            ci.cancel();
+            return;
         }
 
         ChestLogWriter writer = ChestLoggerMod.writer();
@@ -56,6 +53,12 @@ public abstract class ScreenHandlerMixin {
 
         Container container = slot.container;
         BlockPos pos = getBlockPosFromContainer(container);
+
+        // Fallback: If clicked slot is player inventory (e.g. shift-clicking into chest), resolve position from ChestMenu container
+        if (pos == null && menu instanceof ChestMenu chestMenu) {
+            pos = getBlockPosFromContainer(chestMenu.getContainer());
+        }
+
         if (pos == null) return;
 
         ItemStack slotStack = slot.getItem();
@@ -65,7 +68,7 @@ public abstract class ScreenHandlerMixin {
         int countDiff = 0;
         byte flags = 0;
 
-        String clickStr = clickType != null ? clickType.toString() : "";
+        String clickStr = clickType != null ? clickType.name() : "";
         if (clickStr.contains("QUICK_MOVE")) {
             flags |= ChestLogEvent.Flags.SHIFT_CLICK;
         } else if (clickStr.contains("QUICK_CRAFT") || clickStr.contains("DRAG")) {
@@ -98,20 +101,6 @@ public abstract class ScreenHandlerMixin {
             countDiff,
             flags
         ));
-    }
-
-    private void handleGuiClick(int slotIndex, ServerPlayer player, ChestMenu menu) {
-        try {
-            // Access active GUI menu provider if present
-            net.minecraft.world.MenuProvider provider = player.containerMenu != null ? getMenuProvider(player) : null;
-            if (provider instanceof ChestLogGui gui) {
-                gui.handleControlClick(slotIndex, player, menu);
-            }
-        } catch (Throwable ignored) {}
-    }
-
-    private net.minecraft.world.MenuProvider getMenuProvider(ServerPlayer player) {
-        return null; // Menu provider accessor fallback handled via slot control index
     }
 
     private String getItemIdentifier(Item item) {
