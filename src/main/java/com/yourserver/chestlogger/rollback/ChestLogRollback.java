@@ -1,5 +1,6 @@
 package com.yourserver.chestlogger.rollback;
 
+import com.yourserver.chestlogger.ChestLoggerMod;
 import com.yourserver.chestlogger.logging.ChestLogEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -85,7 +86,7 @@ public final class ChestLogRollback {
 
         for (ChestLogEvent event : events) {
             if (event.timestampMillis < cutoffMillis) continue;
-            if (event.isRollbackAudit()) continue; // Ignore past admin rollbacks
+            if (event.isAdminEvent()) continue; // Ignore past admin rollbacks
 
             Map<String, Integer> txMap = inverseByTransaction.computeIfAbsent(
                 event.transactionId, k -> new LinkedHashMap<>()
