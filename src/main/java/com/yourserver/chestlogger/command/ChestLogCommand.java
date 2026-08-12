@@ -7,12 +7,12 @@ import com.yourserver.chestlogger.logging.ChestLogEvent;
 import com.yourserver.chestlogger.logging.ChestLogReader;
 import com.yourserver.chestlogger.logging.ChestLogWriter;
 import com.yourserver.chestlogger.rollback.ChestLogRollback;
-import net.minecraft.command.argument.BlockPosArgumentType;
-import net.minecraft.server.command.CommandManager;
-import net.minecraft.server.command.ServerCommandSource;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.text.Text;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.commands.Commands;
+import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 
 import java.nio.file.Path;
 import java.text.SimpleDateFormat;
@@ -23,32 +23,32 @@ import java.util.concurrent.CompletableFuture;
 public final class ChestLogCommand {
     private ChestLogCommand() {}
 
-    public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-        var statusNode = CommandManager.literal("status")
+    public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
+        var statusNode = Commands.literal("status")
             .executes(ctx -> {
                 ChestLogWriter w = ChestLoggerMod.writer();
-                ctx.getSource().sendFeedback(() -> Text.literal(String.format("§7[ChestLogger] Engine: %s §7| Dropped Events: §f%d",
+                ctx.getSource().sendSuccess(() -> Component.literal(String.format("§7[ChestLogger] Engine: %s §7| Dropped Events: §f%d",
                     w.isDisabled() ? "§cDISABLED (Circuit Broken)" : "§aOK (Active)", w.getDroppedEventCount())), false);
                 return 1;
             });
 
-        var inspectNode = CommandManager.literal("inspect")
-            .then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
+        var inspectNode = Commands.literal("inspect")
+            .then(Commands.argument("pos", BlockPosArgument.blockPos())
                 .executes(ctx -> {
-                    ServerCommandSource source = ctx.getSource();
-                    BlockPos pos = BlockPosArgumentType.getLoadedBlockPos(ctx, "pos");
+                    CommandSourceStack source = ctx.getSource();
+                    BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
                     long packedPos = pos.asLong();
                     Path logDir = ChestLoggerMod.logDirectory();
-                    source.sendFeedback(() -> Text.literal("§7[ChestLogger] Inspecting " + pos.toShortString() + "..."), false);
+                    source.sendSuccess(() -> Component.literal("§7[ChestLogger] Inspecting " + pos.toShortString() + "..."), false);
                     CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, ChestLoggerMod.writer(), packedPos))
                         .thenAcceptAsync(q -> {
                             if (!q.isComplete()) {
-                                source.sendError(Text.literal("§c[ChestLogger] Historical read incomplete. Failed segments: " + q.failedSegments().size()));
+                                source.sendFailure(Component.literal("§c[ChestLogger] Historical read incomplete. Failed segments: " + q.failedSegments().size()));
                             }
                             SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
                             for (ChestLogEvent e : q.events()) {
                                 String action = e.countDiff > 0 ? "§a+ " + e.countDiff : "§c" + e.countDiff;
-                                source.sendFeedback(() -> Text.literal(String.format("§8[%s] §7Player: §f%s §7| %s §7item: §f%s §8(Tx: %d)",
+                                source.sendSuccess(() -> Component.literal(String.format("§8[%s] §7Player: §f%s §7| %s §7item: §f%s §8(Tx: %d)",
                                     df.format(new Date(e.timestampMillis)),
                                     e.playerId == null ? "unknown" : e.playerId.toString().substring(0, 8),
                                     action, e.itemId, e.transactionId)), false);
@@ -57,53 +57,53 @@ public final class ChestLogCommand {
                     return 1;
                 }));
 
-        var rollbackNode = CommandManager.literal("rollback")
-            .then(CommandManager.argument("pos", BlockPosArgumentType.blockPos())
-                .then(CommandManager.argument("time_range", StringArgumentType.word())
+        var rollbackNode = Commands.literal("rollback")
+            .then(Commands.argument("pos", BlockPosArgument.blockPos())
+                .then(Commands.argument("time_range", StringArgumentType.word())
                     .executes(ctx -> {
-                        ServerCommandSource source = ctx.getSource();
-                        ServerWorld world = source.getWorld();
-                        BlockPos pos = BlockPosArgumentType.getLoadedBlockPos(ctx, "pos");
+                        CommandSourceStack source = ctx.getSource();
+                        ServerLevel world = source.getLevel();
+                        BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
                         long duration = parseDuration(StringArgumentType.getString(ctx, "time_range"));
                         long cutoffMillis = System.currentTimeMillis() - duration;
                         long packedPos = pos.asLong();
                         Path logDir = ChestLoggerMod.logDirectory();
                         ChestLogWriter writer = ChestLoggerMod.writer();
                         if (writer.isDisabled()) {
-                            source.sendError(Text.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active. Zero changes made."));
+                            source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active. Zero changes made."));
                             return 0;
                         }
-                        source.sendFeedback(() -> Text.literal("§7[ChestLogger] Querying transactions off-thread..."), false);
+                        source.sendSuccess(() -> Component.literal("§7[ChestLogger] Querying transactions off-thread..."), false);
                         CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, writer, packedPos))
                             .thenAcceptAsync(q -> {
                                 if (writer.isDisabled()) {
-                                    source.sendError(Text.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active. Zero changes made."));
+                                    source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active. Zero changes made."));
                                     return;
                                 }
                                 if (!q.isComplete()) {
-                                    source.sendError(Text.literal("§c[ChestLogger] Rollback Aborted: Could not read all segment files safely. Failed files: " + q.failedSegments().size()));
+                                    source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Could not read all segment files safely. Failed files: " + q.failedSegments().size()));
                                     return;
                                 }
                                 ChestLogRollback.Result result = ChestLogRollback.rollback(world, pos, q.events(), cutoffMillis);
                                 if (!result.success()) {
-                                    source.sendError(Text.literal("§c[ChestLogger] Rollback Aborted: " + result.errorMessage()));
+                                    source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: " + result.errorMessage()));
                                     return;
                                 }
-                                UUID adminId = source.getEntity() != null ? source.getEntity().getUuid() : new UUID(0L, 0L);
+                                UUID adminId = source.getEntity() != null ? source.getEntity().getUUID() : new UUID(0L, 0L);
                                 long droppedBefore = writer.getDroppedEventCount();
                                 writer.enqueue(ChestLogEvent.adminRollback(System.currentTimeMillis(), adminId, packedPos, result.transactionCount()));
                                 boolean auditRejected = writer.isDisabled() || writer.getDroppedEventCount() > droppedBefore;
                                 if (auditRejected) {
-                                    source.sendFeedback(() -> Text.literal(String.format("§e[ChestLogger] Rollback applied, but audit event was rejected or dropped. restored=%d removed=%d", result.restoredItems(), result.removedItems())), true);
+                                    source.sendSuccess(() -> Component.literal(String.format("§e[ChestLogger] Rollback applied, but audit event was rejected or dropped. restored=%d removed=%d", result.restoredItems(), result.removedItems())), true);
                                 } else {
-                                    source.sendFeedback(() -> Text.literal(String.format("§a[ChestLogger] Rollback committed: %d restored, %d removed, %d dropped (%d txs). Audit queued.", result.restoredItems(), result.removedItems(), result.droppedItems(), result.transactionCount())), true);
+                                    source.sendSuccess(() -> Component.literal(String.format("§a[ChestLogger] Rollback committed: %d restored, %d removed, %d dropped (%d txs). Audit queued.", result.restoredItems(), result.removedItems(), result.droppedItems(), result.transactionCount())), true);
                                 }
                             }, world.getServer());
                         return 1;
                     })));
 
-        dispatcher.register(CommandManager.literal("chestlog")
-            .requires(s -> s.hasPermissionLevel(2))
+        dispatcher.register(Commands.literal("chestlog")
+            .requires(s -> s.hasPermission(2))
             .then(statusNode)
             .then(inspectNode)
             .then(rollbackNode));

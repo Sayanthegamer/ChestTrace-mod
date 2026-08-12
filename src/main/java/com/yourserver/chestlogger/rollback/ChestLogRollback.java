@@ -1,15 +1,15 @@
 package com.yourserver.chestlogger.rollback;
 
 import com.yourserver.chestlogger.logging.ChestLogEvent;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.inventory.Inventory;
-import net.minecraft.item.Item;
-import net.minecraft.item.ItemStack;
-import net.minecraft.registry.Registries;
-import net.minecraft.server.world.ServerWorld;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.BlockPos;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,13 +40,13 @@ public final class ChestLogRollback {
     }
 
     public static Result rollback(
-            ServerWorld world,
+            ServerLevel world,
             BlockPos targetPos,
             List<ChestLogEvent> events,
             long cutoffMillis
     ) {
         BlockEntity blockEntity = world.getBlockEntity(targetPos);
-        if (!(blockEntity instanceof Inventory inventory)) {
+        if (!(blockEntity instanceof Container inventory)) {
             return Result.failure("Target block is not a valid container inventory at " + targetPos.toShortString());
         }
 
@@ -76,17 +76,17 @@ public final class ChestLogRollback {
         }
 
         // --- PHASE 2: Snapshot Live Backup & Virtual Preflight Verification ---
-        int invSize = inventory.size();
+        int invSize = inventory.getContainerSize();
         ItemStack[] originalLiveSlots = new ItemStack[invSize];
         ItemStack[] virtualSlots = new ItemStack[invSize];
         Map<String, Integer> availableCounts = new HashMap<>();
 
         for (int i = 0; i < invSize; i++) {
-            ItemStack stack = inventory.getStack(i);
+            ItemStack stack = inventory.getItem(i);
             originalLiveSlots[i] = stack.copy(); 
             virtualSlots[i] = stack.copy();
             if (!stack.isEmpty()) {
-                String itemId = Registries.ITEM.getId(stack.getItem()).toString();
+                String itemId = BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
                 availableCounts.merge(itemId, stack.getCount(), Integer::sum);
             }
         }
@@ -98,9 +98,9 @@ public final class ChestLogRollback {
             int netInverse = entry.getValue();
             if (netInverse == 0) continue;
 
-            Identifier id = Identifier.tryParse(entry.getKey());
+            ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
             if (id == null) return Result.failure("Unresolvable Item Identifier: " + entry.getKey());
-            Item item = Registries.ITEM.get(id);
+            Item item = BuiltInRegistries.ITEM.get(id);
             if (item == null) return Result.failure("Item missing from Registry: " + entry.getKey());
 
             if (netInverse < 0) {
@@ -130,7 +130,7 @@ public final class ChestLogRollback {
                 if (stack.isEmpty() || stack.getItem() != item) continue;
 
                 int take = Math.min(stack.getCount(), remainingToRemove);
-                stack.decrement(take);
+                stack.shrink(take);
                 if (stack.isEmpty()) virtualSlots[i] = ItemStack.EMPTY;
                 remainingToRemove -= take;
                 removed += take;
@@ -145,12 +145,12 @@ public final class ChestLogRollback {
                 ItemStack stack = virtualSlots[i];
                 if (stack.isEmpty() || stack.getItem() != item) continue;
 
-                int max = Math.min(stack.getMaxCount(), inventory.getMaxCountPerStack());
+                int max = Math.min(stack.getMaxStackSize(), inventory.getMaxStackSize());
                 int freeSpace = max - stack.getCount();
                 if (freeSpace <= 0) continue;
 
                 int insert = Math.min(freeSpace, remainingToRestore);
-                stack.increment(insert);
+                stack.grow(insert);
                 remainingToRestore -= insert;
                 restored += insert;
             }
@@ -158,14 +158,14 @@ public final class ChestLogRollback {
             for (int i = 0; i < invSize && remainingToRestore > 0; i++) {
                 if (!virtualSlots[i].isEmpty()) continue;
 
-                int insert = Math.min(item.getMaxCount(), remainingToRestore);
+                int insert = Math.min(item.getDefaultInstance().getMaxStackSize(), remainingToRestore);
                 virtualSlots[i] = new ItemStack(item, insert);
                 remainingToRestore -= insert;
                 restored += insert;
             }
 
             while (remainingToRestore > 0) {
-                int dropCount = Math.min(item.getMaxCount(), remainingToRestore);
+                int dropCount = Math.min(item.getDefaultInstance().getMaxStackSize(), remainingToRestore);
                 pendingWorldDrops.add(new ItemStack(item, dropCount));
                 remainingToRestore -= dropCount;
                 dropped += dropCount;
@@ -176,9 +176,9 @@ public final class ChestLogRollback {
         List<ItemEntity> spawnedEntities = new ArrayList<>();
         try {
             for (int i = 0; i < invSize; i++) {
-                inventory.setStack(i, virtualSlots[i]);
+                inventory.setItem(i, virtualSlots[i]);
             }
-            inventory.markDirty();
+            inventory.setChanged();
 
             for (ItemStack dropStack : pendingWorldDrops) {
                 ItemEntity entity = new ItemEntity(world,
@@ -186,7 +186,7 @@ public final class ChestLogRollback {
                         targetPos.getY() + 1.0,
                         targetPos.getZ() + 0.5,
                         dropStack);
-                if (world.spawnEntity(entity)) {
+                if (world.addFreshEntity(entity)) {
                     spawnedEntities.add(entity);
                 } else {
                     throw new IllegalStateException("Engine rejected ItemEntity spawn at " + targetPos.toShortString());
@@ -196,13 +196,13 @@ public final class ChestLogRollback {
             LOGGER.error("ChestLogger: commit failed; initiating best-effort compensation", commitError);
             boolean revertSucceeded = true;
             for (int i = 0; i < invSize; i++) {
-                try { inventory.setStack(i, originalLiveSlots[i]); }
+                try { inventory.setItem(i, originalLiveSlots[i]); }
                 catch (Throwable doubleFault) {
                     revertSucceeded = false;
                     LOGGER.error("ChestLogger: DOUBLE FAULT reverting slot " + i, doubleFault);
                 }
             }
-            try { inventory.markDirty(); } catch (Throwable ignored) {}
+            try { inventory.setChanged(); } catch (Throwable ignored) {}
             for (ItemEntity entity : spawnedEntities) {
                 try { entity.discard(); } catch (Throwable ignored) {}
             }
