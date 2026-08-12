@@ -85,12 +85,17 @@ public abstract class ScreenHandlerMixin {
             return be.getBlockPos();
         }
         if (container instanceof CompoundContainer cc) {
-            if (cc.container1 instanceof BlockEntity be1) {
-                return be1.getBlockPos();
-            }
-            if (cc.container2 instanceof BlockEntity be2) {
-                return be2.getBlockPos();
-            }
+            try {
+                for (java.lang.reflect.Field f : CompoundContainer.class.getDeclaredFields()) {
+                    if (Container.class.isAssignableFrom(f.getType())) {
+                        f.setAccessible(true);
+                        Object subContainer = f.get(cc);
+                        if (subContainer instanceof BlockEntity be) {
+                            return be.getBlockPos();
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
         }
         return null;
     }
