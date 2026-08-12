@@ -136,12 +136,8 @@ public final class ChestLogGui implements MenuProvider {
                 lore.add(Component.literal("§7Latest: §f" + df.format(new Date(entry.latestTimestamp()))));
                 lore.add(Component.literal("§7Events Merged: §f" + entry.eventCount()));
 
-                try {
-                    icon.set(DataComponents.CUSTOM_NAME, customName);
-                    icon.set(DataComponents.LORE, new ItemLore(lore));
-                } catch (Throwable t) {
-                    icon.setHoverName(customName);
-                }
+                icon.set(DataComponents.CUSTOM_NAME, customName);
+                icon.set(DataComponents.LORE, new ItemLore(lore));
 
                 menu.getContainer().setItem(slotIndex, icon);
             }
@@ -175,12 +171,8 @@ public final class ChestLogGui implements MenuProvider {
                 lore.add(Component.literal("§7Time: §f" + df.format(new Date(e.timestampMillis))));
                 lore.add(Component.literal("§8Tx ID: #" + e.transactionId));
 
-                try {
-                    icon.set(DataComponents.CUSTOM_NAME, customName);
-                    icon.set(DataComponents.LORE, new ItemLore(lore));
-                } catch (Throwable t) {
-                    icon.setHoverName(customName);
-                }
+                icon.set(DataComponents.CUSTOM_NAME, customName);
+                icon.set(DataComponents.LORE, new ItemLore(lore));
 
                 menu.getContainer().setItem(slotIndex, icon);
             }
@@ -189,32 +181,24 @@ public final class ChestLogGui implements MenuProvider {
         // --- Bottom Control Bar (Slots 45 to 53) ---
         // Slot 45: Previous Page
         ItemStack prevBtn = new ItemStack(Items.PAPER);
-        try { prevBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Previous Page ]")); } catch (Throwable t) { prevBtn.setHoverName(Component.literal("§e[ Previous Page ]")); }
+        prevBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Previous Page ]"));
         menu.getContainer().setItem(45, prevBtn);
 
         // Slot 48: Mode Toggle
         ItemStack modeBtn = new ItemStack(Items.BOOK);
-        try {
-            modeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
-            modeBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to toggle between aggregated summary and raw click logs."))));
-        } catch (Throwable t) {
-            modeBtn.setHoverName(Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
-        }
+        modeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
+        modeBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to toggle between aggregated summary and raw click logs."))));
         menu.getContainer().setItem(48, modeBtn);
 
         // Slot 49: Rollback Button
         ItemStack rollbackBtn = new ItemStack(Items.ANVIL);
-        try {
-            rollbackBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[ Rollback Chest (5m) ]"));
-            rollbackBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to execute an instant 5-minute rollback on this chest."))));
-        } catch (Throwable t) {
-            rollbackBtn.setHoverName(Component.literal("§c[ Rollback Chest (5m) ]"));
-        }
+        rollbackBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[ Rollback Chest (5m) ]"));
+        rollbackBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to execute an instant 5-minute rollback on this chest."))));
         menu.getContainer().setItem(49, rollbackBtn);
 
         // Slot 53: Next Page
         ItemStack nextBtn = new ItemStack(Items.PAPER);
-        try { nextBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Next Page ]")); } catch (Throwable t) { nextBtn.setHoverName(Component.literal("§e[ Next Page ]")); }
+        nextBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Next Page ]"));
         menu.getContainer().setItem(53, nextBtn);
     }
 
