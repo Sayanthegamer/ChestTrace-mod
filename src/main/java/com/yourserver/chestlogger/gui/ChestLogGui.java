@@ -50,13 +50,25 @@ public final class ChestLogGui implements MenuProvider {
         Path logDir = ChestLoggerMod.logDirectory();
         player.sendSystemMessage(Component.literal("§7[ChestLogger] Loading history GUI for " + pos.toShortString() + "..."));
 
-        MinecraftServer server = getServer(player);
-
         CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, ChestLoggerMod.writer(), packedPos))
-            .thenAcceptAsync(query -> {
-                ChestLogGui gui = new ChestLogGui(pos, query.events());
-                player.openMenu(gui);
-            }, server);
+            .thenAccept(query -> {
+                try {
+                    MinecraftServer server = getServer(player);
+                    if (server != null) {
+                        server.execute(() -> {
+                            try {
+                                ChestLogGui gui = new ChestLogGui(pos, query.events());
+                                player.openMenu(gui);
+                            } catch (Throwable t) {
+                                ChestLoggerMod.LOGGER.error("Failed to populate/open ChestLogGui", t);
+                                player.sendSystemMessage(Component.literal("§c[ChestLogger] Error opening GUI: " + t.getMessage()));
+                            }
+                        });
+                    }
+                } catch (Throwable t) {
+                    ChestLoggerMod.LOGGER.error("Failed to schedule openMenu task on server thread", t);
+                }
+            });
     }
 
     private static MinecraftServer getServer(ServerPlayer player) {
@@ -124,8 +136,12 @@ public final class ChestLogGui implements MenuProvider {
                 lore.add(Component.literal("§7Latest: §f" + df.format(new Date(entry.latestTimestamp()))));
                 lore.add(Component.literal("§7Events Merged: §f" + entry.eventCount()));
 
-                icon.set(DataComponents.CUSTOM_NAME, customName);
-                icon.set(DataComponents.LORE, new ItemLore(lore));
+                try {
+                    icon.set(DataComponents.CUSTOM_NAME, customName);
+                    icon.set(DataComponents.LORE, new ItemLore(lore));
+                } catch (Throwable t) {
+                    icon.setHoverName(customName);
+                }
 
                 menu.getContainer().setItem(slotIndex, icon);
             }
@@ -159,8 +175,12 @@ public final class ChestLogGui implements MenuProvider {
                 lore.add(Component.literal("§7Time: §f" + df.format(new Date(e.timestampMillis))));
                 lore.add(Component.literal("§8Tx ID: #" + e.transactionId));
 
-                icon.set(DataComponents.CUSTOM_NAME, customName);
-                icon.set(DataComponents.LORE, new ItemLore(lore));
+                try {
+                    icon.set(DataComponents.CUSTOM_NAME, customName);
+                    icon.set(DataComponents.LORE, new ItemLore(lore));
+                } catch (Throwable t) {
+                    icon.setHoverName(customName);
+                }
 
                 menu.getContainer().setItem(slotIndex, icon);
             }
@@ -169,24 +189,32 @@ public final class ChestLogGui implements MenuProvider {
         // --- Bottom Control Bar (Slots 45 to 53) ---
         // Slot 45: Previous Page
         ItemStack prevBtn = new ItemStack(Items.PAPER);
-        prevBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Previous Page ]"));
+        try { prevBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Previous Page ]")); } catch (Throwable t) { prevBtn.setHoverName(Component.literal("§e[ Previous Page ]")); }
         menu.getContainer().setItem(45, prevBtn);
 
         // Slot 48: Mode Toggle
         ItemStack modeBtn = new ItemStack(Items.BOOK);
-        modeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
-        modeBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to toggle between aggregated summary and raw click logs."))));
+        try {
+            modeBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
+            modeBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to toggle between aggregated summary and raw click logs."))));
+        } catch (Throwable t) {
+            modeBtn.setHoverName(Component.literal("§b[ Mode: " + (aggregatedMode ? "Aggregated Net" : "Raw Events") + " ]"));
+        }
         menu.getContainer().setItem(48, modeBtn);
 
         // Slot 49: Rollback Button
         ItemStack rollbackBtn = new ItemStack(Items.ANVIL);
-        rollbackBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[ Rollback Chest (5m) ]"));
-        rollbackBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to execute an instant 5-minute rollback on this chest."))));
+        try {
+            rollbackBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§c[ Rollback Chest (5m) ]"));
+            rollbackBtn.set(DataComponents.LORE, new ItemLore(List.of(Component.literal("§7Click to execute an instant 5-minute rollback on this chest."))));
+        } catch (Throwable t) {
+            rollbackBtn.setHoverName(Component.literal("§c[ Rollback Chest (5m) ]"));
+        }
         menu.getContainer().setItem(49, rollbackBtn);
 
         // Slot 53: Next Page
         ItemStack nextBtn = new ItemStack(Items.PAPER);
-        nextBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Next Page ]"));
+        try { nextBtn.set(DataComponents.CUSTOM_NAME, Component.literal("§e[ Next Page ]")); } catch (Throwable t) { nextBtn.setHoverName(Component.literal("§e[ Next Page ]")); }
         menu.getContainer().setItem(53, nextBtn);
     }
 
