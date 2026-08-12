@@ -21,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -28,7 +29,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ScreenHandlerMixin {
 
     @Inject(method = "clicked", at = @At("HEAD"), cancellable = true)
-    private void onSlotClickIntercept(int slotIndex, int button, ClickType clickType, Player player, CallbackInfo ci) {
+    private void onSlotClickIntercept(int slotIndex, int button, @Coerce Object clickType, Player player, CallbackInfo ci) {
         AbstractContainerMenu menu = (AbstractContainerMenu) (Object) this;
 
         // --- GUI Click Protection & Control Handling for ChestLogMenu ---
