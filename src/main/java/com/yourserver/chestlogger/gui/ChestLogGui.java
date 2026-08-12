@@ -9,14 +9,13 @@ import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -51,11 +50,30 @@ public final class ChestLogGui implements MenuProvider {
         Path logDir = ChestLoggerMod.logDirectory();
         player.sendSystemMessage(Component.literal("§7[ChestLogger] Loading history GUI for " + pos.toShortString() + "..."));
 
+        MinecraftServer server = getServer(player);
+
         CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, ChestLoggerMod.writer(), packedPos))
             .thenAcceptAsync(query -> {
                 ChestLogGui gui = new ChestLogGui(pos, query.events());
                 player.openMenu(gui);
-            }, player.getServer());
+            }, server);
+    }
+
+    private static MinecraftServer getServer(ServerPlayer player) {
+        if (player == null) return null;
+        try {
+            return player.serverLevel().getServer();
+        } catch (Throwable t1) {
+            try {
+                return (MinecraftServer) player.getClass().getMethod("getServer").invoke(player);
+            } catch (Throwable t2) {
+                try {
+                    return (MinecraftServer) player.getClass().getField("server").get(player);
+                } catch (Throwable t3) {
+                    return null;
+                }
+            }
+        }
     }
 
     @Override
