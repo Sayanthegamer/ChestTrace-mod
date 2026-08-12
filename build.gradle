@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version '1.17-SNAPSHOT'
+    id 'fabric-loom' version '1.7.4'
     id 'maven-publish'
 }
 
@@ -15,9 +15,9 @@ repositories {
 }
 
 dependencies {
-    // Minecraft & Fabric dependencies (Using official Mojang Mappings for MC 26.2)
+    // Minecraft & Fabric dependencies for unobfuscated MC 26.2
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
+    mappings files("src/main/mappings/empty.tiny")
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
@@ -48,8 +48,4 @@ jar {
     from("LICENSE") {
         rename "${it}_${base.archivesName.get()}", "${it}"
     }
-}
-
-remapJar {
-    targetNamespace = 'named'
 }
