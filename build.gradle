@@ -14,14 +14,12 @@ repositories {
     mavenCentral()
 }
 
-loom {
-    // MC 26.2 uses Mojang official mappings (Yarn no longer maintained for 26.x)
-    officialMojangMappings()
-}
-
 dependencies {
     // Minecraft & Fabric dependencies
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.layered {
+        officialMojangMappings()
+    }
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
