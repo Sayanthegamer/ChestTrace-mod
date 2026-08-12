@@ -14,14 +14,10 @@ repositories {
     mavenCentral()
 }
 
-loom {
-    // Minecraft 26.2 is shipped unobfuscated by Mojang: disable obfuscation & remapping
-    disableObfuscation.set(true)
-}
-
 dependencies {
-    // Minecraft & Fabric dependencies for MC 26.2
+    // Minecraft & Fabric dependencies for MC 26.2 (Unobfuscated empty layered mapping)
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.layered {}
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
