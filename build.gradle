@@ -14,10 +14,16 @@ repositories {
     mavenCentral()
 }
 
+loom {
+    // Configure Fabric Loom for unobfuscated MC 26.2 build pipeline
+    productionNamespace = 'official'
+    useIntermediateMappings = false
+}
+
 dependencies {
-    // Minecraft & Fabric dependencies for MC 26.2 (Unobfuscated empty layered mapping)
+    // Minecraft & Fabric dependencies for MC 26.2
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.layered {}
+    mappings loom.officialMojangMappings()
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
