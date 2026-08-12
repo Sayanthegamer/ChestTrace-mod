@@ -1,0 +1,39 @@
+name: Build ChestLogger Mod
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Codebase
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21 JDK (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version 8.8
+
+      - name: Grant Execute Permission to Gradle Wrapper
+        run: chmod +x gradlew
+
+      - name: Build Mod with Gradle
+        run: ./gradlew build --no-daemon
+
+      - name: Upload Mod Jar Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChestLogger-Mod-Jar
+          path: build/libs/*.jar

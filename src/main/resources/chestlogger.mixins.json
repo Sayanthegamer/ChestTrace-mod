@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.yourserver.chestlogger.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ScreenHandlerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

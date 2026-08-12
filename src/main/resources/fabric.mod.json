@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "id": "chestlogger",
+  "version": "${version}",
+  "name": "ChestLogger",
+  "description": "High-Performance HDD-Optimized Chest Inventory Logger and Rollback Mod for Fabric.",
+  "authors": [
+    "YourServer"
+  ],
+  "contact": {},
+  "license": "MIT",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "com.yourserver.chestlogger.ChestLoggerMod"
+    ]
+  },
+  "mixins": [
+    "chestlogger.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "minecraft": ">=1.20.5",
+    "java": ">=21"
+  }
+}
