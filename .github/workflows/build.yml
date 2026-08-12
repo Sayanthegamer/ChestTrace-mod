@@ -20,10 +20,10 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle 8.8
+      - name: Setup Gradle 9.5.1
         uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.8'
+          gradle-version: '9.5.1'
 
       - name: Build Mod with Gradle
         run: gradle build --no-daemon
@@ -33,4 +33,3 @@ jobs:
         with:
           name: ChestLogger-Mod-Jar
           path: build/libs/*.jar
-
