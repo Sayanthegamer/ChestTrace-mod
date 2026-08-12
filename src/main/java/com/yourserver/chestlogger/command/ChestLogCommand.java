@@ -23,6 +23,19 @@ import java.util.concurrent.CompletableFuture;
 public final class ChestLogCommand {
     private ChestLogCommand() {}
 
+    private static boolean hasPermissionLevel(CommandSourceStack source, int level) {
+        try {
+            for (java.lang.reflect.Method m : source.getClass().getMethods()) {
+                if ((m.getName().equals("hasPermission") || m.getName().equals("hasPermissionLevel"))
+                        && m.getParameterCount() == 1
+                        && m.getParameterTypes()[0] == int.class) {
+                    return (Boolean) m.invoke(source, level);
+                }
+            }
+        } catch (Exception ignored) {}
+        return true;
+    }
+
     public static void register(CommandDispatcher<CommandSourceStack> dispatcher) {
         var statusNode = Commands.literal("status")
             .executes(ctx -> {
@@ -98,12 +111,12 @@ public final class ChestLogCommand {
                                 } else {
                                     source.sendSuccess(() -> Component.literal(String.format("§a[ChestLogger] Rollback committed: %d restored, %d removed, %d dropped (%d txs). Audit queued.", result.restoredItems(), result.removedItems(), result.droppedItems(), result.transactionCount())), true);
                                 }
-                            }, world.getServer());
+                                }, world.getServer());
                         return 1;
                     })));
 
         dispatcher.register(Commands.literal("chestlog")
-            .requires(s -> s.hasPermission(2))
+            .requires(s -> hasPermissionLevel(s, 2))
             .then(statusNode)
             .then(inspectNode)
             .then(rollbackNode));
