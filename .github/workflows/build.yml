@@ -20,20 +20,17 @@ jobs:
           distribution: 'temurin'
           java-version: '21'
 
-      - name: Setup Gradle
+      - name: Setup Gradle 8.8
         uses: gradle/actions/setup-gradle@v3
-
-      - name: Generate Gradle Wrapper
-        run: gradle wrapper --gradle-version 8.8
-
-      - name: Grant Execute Permission to Gradle Wrapper
-        run: chmod +x gradlew
+        with:
+          gradle-version: '8.8'
 
       - name: Build Mod with Gradle
-        run: ./gradlew build --no-daemon
+        run: gradle build --no-daemon
 
       - name: Upload Mod Jar Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ChestLogger-Mod-Jar
           path: build/libs/*.jar
+
