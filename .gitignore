@@ -1,0 +1,36 @@
+# Gradle build artifacts and temporary files
+.gradle/
+build/
+out/
+bin/
+
+# Minecraft Fabric Loom test environment files
+run/
+
+# Eclipse IDE
+.classpath
+.project
+.settings/
+
+# IntelliJ IDEA
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Visual Studio Code
+.vscode/
+
+# OS & System files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.bak
+*.swp
+*.tmp
+
+# Log files and crash dumps
+*.log
+hs_err_pid*
+replay_pid*
+*.hprof
