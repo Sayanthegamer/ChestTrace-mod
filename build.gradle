@@ -14,6 +14,11 @@ repositories {
     mavenCentral()
 }
 
+loom {
+    // Disable remapping outputs so official Mojang names are preserved for unobfuscated MC 26.2
+    dontRemapOutputs = true
+}
+
 dependencies {
     // Minecraft & Fabric dependencies (Using official Mojang Mappings per Context7 docs)
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
