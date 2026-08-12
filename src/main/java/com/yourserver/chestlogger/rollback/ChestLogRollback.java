@@ -100,7 +100,7 @@ public final class ChestLogRollback {
 
             ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
             if (id == null) return Result.failure("Unresolvable Item Identifier: " + entry.getKey());
-            Item item = BuiltInRegistries.ITEM.get(id);
+            Item item = BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
             if (item == null) return Result.failure("Item missing from Registry: " + entry.getKey());
 
             if (netInverse < 0) {
