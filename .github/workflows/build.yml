@@ -14,16 +14,16 @@ jobs:
       - name: Checkout Codebase
         uses: actions/checkout@v4
 
-      - name: Set up Java 21 JDK (Temurin)
+      - name: Set up Java 25 JDK (Temurin)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '21'
+          java-version: '25'
 
-      - name: Setup Gradle 8.8
+      - name: Setup Gradle 9.5.1
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: '8.8'
+          gradle-version: '9.5.1'
 
       - name: Build Mod with Gradle
         run: gradle build --no-daemon
