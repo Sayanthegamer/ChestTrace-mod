@@ -19,6 +19,23 @@ public final class ItemUtils {
             return "minecraft:air";
         }
 
+        // Tier 0: DescriptionId string parsing (Zero Registry Linkage, immunity to mapping crashes)
+        try {
+            String descKey = item.getDescriptionId();
+            if (descKey != null && !descKey.isEmpty()) {
+                if (descKey.startsWith("block.minecraft.")) {
+                    return "minecraft:" + descKey.substring("block.minecraft.".length());
+                }
+                if (descKey.startsWith("item.minecraft.")) {
+                    return "minecraft:" + descKey.substring("item.minecraft.".length());
+                }
+                String[] parts = descKey.split("\\.");
+                if (parts.length >= 3 && !parts[2].equals("air")) {
+                    return parts[1] + ":" + parts[2];
+                }
+            }
+        } catch (Throwable ignored) {}
+
         // Tier 1: Direct BuiltInRegistries.ITEM.getKey
         try {
             ResourceLocation loc = BuiltInRegistries.ITEM.getKey(item);
