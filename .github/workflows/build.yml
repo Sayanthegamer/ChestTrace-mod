@@ -17,6 +17,7 @@ jobs:
       - name: Repair and prepare Gradle wrapper
         run: |
           sed -i 's/\r$//' gradlew
+          sed -i 's/DEFAULT_JVM_OPTS=.*/DEFAULT_JVM_OPTS="-Xmx64m -Xms64m"/' gradlew
           chmod +x ./gradlew
 
       - name: Setup Gradle
