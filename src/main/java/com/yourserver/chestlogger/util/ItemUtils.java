@@ -1,6 +1,6 @@
 package com.yourserver.chestlogger.util;
 
-import net.minecraft.core.Registry;
+import com.yourserver.chestlogger.ChestLoggerMod;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -14,37 +14,65 @@ public final class ItemUtils {
 
     private ItemUtils() {}
 
-    @SuppressWarnings("unchecked")
     public static String getItemIdentifier(Item item) {
         if (item == null || item == Items.AIR) {
             return "minecraft:air";
         }
 
-        // 1. Canonical BlockItem fallback (Forced Interface Cast)
+        // Tier 1: Direct BuiltInRegistries.ITEM.getKey
+        try {
+            ResourceLocation loc = BuiltInRegistries.ITEM.getKey(item);
+            if (loc != null && !loc.getPath().equals("air")) {
+                return loc.toString();
+            }
+        } catch (Throwable e) {
+            ChestLoggerMod.LOGGER.error("ItemUtils: Tier 1 (ITEM.getKey) failed for item {}: ", item, e);
+        }
+
+        // Tier 2: BlockItem -> BuiltInRegistries.BLOCK.getKey
         if (item instanceof BlockItem blockItem) {
             try {
                 Block block = blockItem.getBlock();
                 if (block != null) {
-                    ResourceLocation blockLoc = ((Registry<Block>) BuiltInRegistries.BLOCK).getKey(block);
+                    ResourceLocation blockLoc = BuiltInRegistries.BLOCK.getKey(block);
                     if (blockLoc != null && !blockLoc.getPath().equals("air")) {
                         return blockLoc.toString();
                     }
                 }
-            } catch (Throwable ignored) {}
+            } catch (Throwable e) {
+                ChestLoggerMod.LOGGER.error("ItemUtils: Tier 2 (BLOCK.getKey) failed for item {}: ", item, e);
+            }
         }
 
-        // 2. Standard Item lookup (Forced Interface Cast)
+        // Tier 3: BuiltInRegistries.ITEM.getResourceKey
         try {
-            ResourceLocation loc = ((Registry<Item>) BuiltInRegistries.ITEM).getKey(item);
-            if (loc != null && !loc.getPath().equals("air")) {
-                return loc.toString();
+            var optKey = BuiltInRegistries.ITEM.getResourceKey(item);
+            if (optKey != null && optKey.isPresent()) {
+                ResourceLocation loc = optKey.get().location();
+                if (loc != null && !loc.getPath().equals("air")) {
+                    return loc.toString();
+                }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            ChestLoggerMod.LOGGER.error("ItemUtils: Tier 3 (ITEM.getResourceKey) failed for item {}: ", item, e);
+        }
 
+        // Tier 4: Holder location
+        try {
+            if (item.builtInRegistryHolder() != null && item.builtInRegistryHolder().isBound()) {
+                ResourceLocation loc = item.builtInRegistryHolder().key().location();
+                if (loc != null && !loc.getPath().equals("air")) {
+                    return loc.toString();
+                }
+            }
+        } catch (Throwable e) {
+            ChestLoggerMod.LOGGER.error("ItemUtils: Tier 4 (holder) failed for item {}: ", item, e);
+        }
+
+        ChestLoggerMod.LOGGER.error("ItemUtils: All resolution tiers failed for item class {}; returning minecraft:air", item.getClass().getName());
         return "minecraft:air";
     }
 
-    @SuppressWarnings("unchecked")
     public static Item getItemFromIdentifier(String itemIdStr, Item fallback) {
         if (itemIdStr == null || itemIdStr.isEmpty() || itemIdStr.equals("minecraft:air")) {
             return fallback;
@@ -53,17 +81,19 @@ public final class ItemUtils {
         try {
             ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
             if (id != null) {
-                Item resolved = ((Registry<Item>) BuiltInRegistries.ITEM).getValue(id);
+                Item resolved = BuiltInRegistries.ITEM.getValue(id);
                 if (resolved != null && resolved != Items.AIR) {
                     return resolved;
                 }
 
-                Block block = ((Registry<Block>) BuiltInRegistries.BLOCK).getValue(id);
+                Block block = BuiltInRegistries.BLOCK.getValue(id);
                 if (block != null && block.asItem() != null && block.asItem() != Items.AIR) {
                     return block.asItem();
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            ChestLoggerMod.LOGGER.error("ItemUtils: getItemFromIdentifier failed for {}: ", itemIdStr, e);
+        }
 
         return fallback;
     }
