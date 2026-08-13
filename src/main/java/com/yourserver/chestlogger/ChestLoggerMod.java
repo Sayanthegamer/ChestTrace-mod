@@ -1,9 +1,8 @@
 package com.yourserver.chestlogger;
 
-import com.yourserver.chestlogger.command.ChestLogCommand;
+import com.yourserver.chestlogger.command.CommandRegistrar;
 import com.yourserver.chestlogger.logging.ChestLogWriter;
 import net.fabricmc.api.ModInitializer;
-import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
 import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.server.MinecraftServer;
@@ -42,9 +41,11 @@ public final class ChestLoggerMod implements ModInitializer {
             SERVER = null;
         });
 
-        CommandRegistrationCallback.EVENT.register((dispatcher, registryAccess, environment) -> {
-            ChestLogCommand.register(dispatcher);
-        });
+        try {
+            CommandRegistrar.register();
+        } catch (Throwable e) {
+            LOGGER.error("ChestLogger: Failed to initialize command registration: ", e);
+        }
     }
 
     public static ChestLogWriter writer() {
