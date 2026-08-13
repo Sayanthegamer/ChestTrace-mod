@@ -8,11 +8,11 @@ import com.yourserver.chestlogger.logging.ChestLogEvent;
 import com.yourserver.chestlogger.logging.ChestLogReader;
 import com.yourserver.chestlogger.logging.ChestLogWriter;
 import com.yourserver.chestlogger.rollback.ChestLogRollback;
+import com.yourserver.chestlogger.util.ComponentHelper;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.coordinates.BlockPosArgument;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -42,8 +42,9 @@ public final class ChestLogCommand {
         var statusNode = Commands.literal("status")
             .executes(ctx -> {
                 ChestLogWriter w = ChestLoggerMod.writer();
-                ctx.getSource().sendSuccess(() -> Component.literal(String.format("§7[ChestLogger] Engine: %s §7| Dropped Events: §f%d",
-                    w.isDisabled() ? "§cDISABLED (Circuit Broken)" : "§aOK (Active)", w.getDroppedEventCount())), false);
+                String msg = String.format("§7[ChestLogger] Engine: %s §7| Dropped Events: §f%d",
+                    w.isDisabled() ? "§cDISABLED (Circuit Broken)" : "§aOK (Active)", w.getDroppedEventCount());
+                ComponentHelper.sendSuccess(ctx.getSource(), msg, false);
                 return 1;
             });
 
@@ -56,10 +57,10 @@ public final class ChestLogCommand {
                         BlockPos pos = blockHit.getBlockPos();
                         ChestLogGui.open(player, pos);
                     } else {
-                        source.sendFailure(Component.literal("§c[ChestLogger] No block targeted. Look at a chest or specify coordinates: /chestlog inspect <x> <y> <z>"));
+                        ComponentHelper.sendFailure(source, "§c[ChestLogger] No block targeted. Look at a chest or specify coordinates: /chestlog inspect <x> <y> <z>");
                     }
                 } else {
-                    source.sendFailure(Component.literal("§c[ChestLogger] GUI inspect command must be executed by a player in-game."));
+                    ComponentHelper.sendFailure(source, "§c[ChestLogger] GUI inspect command must be executed by a player in-game.");
                 }
                 return 1;
             })
@@ -70,7 +71,7 @@ public final class ChestLogCommand {
                     if (source.getEntity() instanceof ServerPlayer player) {
                         ChestLogGui.open(player, pos);
                     } else {
-                        source.sendFailure(Component.literal("§c[ChestLogger] GUI inspect command must be executed by a player in-game."));
+                        ComponentHelper.sendFailure(source, "§c[ChestLogger] GUI inspect command must be executed by a player in-game.");
                     }
                     return 1;
                 })
@@ -80,24 +81,25 @@ public final class ChestLogCommand {
                         BlockPos pos = BlockPosArgument.getLoadedBlockPos(ctx, "pos");
                         long packedPos = pos.asLong();
                         Path logDir = ChestLoggerMod.logDirectory();
-                        source.sendSuccess(() -> Component.literal("§7[ChestLogger] Inspecting " + pos.toShortString() + "..."), false);
+                        ComponentHelper.sendSuccess(source, "§7[ChestLogger] Inspecting " + pos.toShortString() + "...", false);
                         CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, ChestLoggerMod.writer(), packedPos))
                             .thenAcceptAsync(q -> {
                                 if (!q.isComplete()) {
-                                    source.sendFailure(Component.literal("§c[ChestLogger] Historical read incomplete. Failed segments: " + q.failedSegments().size()));
+                                    ComponentHelper.sendFailure(source, "§c[ChestLogger] Historical read incomplete. Failed segments: " + q.failedSegments().size());
                                 }
                                 SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
                                 for (ChestLogEvent e : q.events()) {
                                     String action = e.countDiff > 0 ? "§a+ " + e.countDiff : "§c" + e.countDiff;
-                                    source.sendSuccess(() -> Component.literal(String.format("§8[%s] §7Player: §f%s §7| %s §7item: §f%s §8(Tx: %d)",
+                                    String line = String.format("§8[%s] §7Player: §f%s §7| %s §7item: §f%s §8(Tx: %d)",
                                         df.format(new Date(e.timestampMillis)),
                                         e.playerId == null ? "unknown" : e.playerId.toString().substring(0, 8),
-                                        action, e.itemId, e.transactionId)), false);
+                                        action, e.itemId, e.transactionId);
+                                    ComponentHelper.sendSuccess(source, line, false);
                                 }
                             }, source.getServer())
                             .exceptionally(ex -> {
                                 ChestLoggerMod.LOGGER.error("ChestLogCommand.inspect: async query failed", ex);
-                                source.sendFailure(Component.literal("§c[ChestLogger] Failed to query chest history: " + ex.getMessage()));
+                                ComponentHelper.sendFailure(source, "§c[ChestLogger] Failed to query chest history: " + ex.getMessage());
                                 return null;
                             });
                         return 1;
@@ -116,23 +118,23 @@ public final class ChestLogCommand {
                         Path logDir = ChestLoggerMod.logDirectory();
                         ChestLogWriter writer = ChestLoggerMod.writer();
                         if (writer == null || writer.isDisabled()) {
-                            source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active or engine uninitialized. Zero changes made."));
+                            ComponentHelper.sendFailure(source, "§c[ChestLogger] Rollback Aborted: Writer circuit breaker active or engine uninitialized. Zero changes made.");
                             return 0;
                         }
-                        source.sendSuccess(() -> Component.literal("§7[ChestLogger] Querying transactions off-thread..."), false);
+                        ComponentHelper.sendSuccess(source, "§7[ChestLogger] Querying transactions off-thread...", false);
                         CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, writer, packedPos))
                             .thenAcceptAsync(q -> {
                                 if (writer.isDisabled()) {
-                                    source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active. Zero changes made."));
+                                    ComponentHelper.sendFailure(source, "§c[ChestLogger] Rollback Aborted: Writer circuit breaker active. Zero changes made.");
                                     return;
                                 }
                                 if (!q.isComplete()) {
-                                    source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Could not read all segment files safely. Failed files: " + q.failedSegments().size()));
+                                    ComponentHelper.sendFailure(source, "§c[ChestLogger] Rollback Aborted: Could not read all segment files safely. Failed files: " + q.failedSegments().size());
                                     return;
                                 }
                                 ChestLogRollback.Result result = ChestLogRollback.rollback(world, pos, q.events(), cutoffMillis);
                                 if (!result.success()) {
-                                    source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: " + result.errorMessage()));
+                                    ComponentHelper.sendFailure(source, "§c[ChestLogger] Rollback Aborted: " + result.errorMessage());
                                     return;
                                 }
                                 UUID adminId = source.getEntity() != null ? source.getEntity().getUUID() : new UUID(0L, 0L);
@@ -140,14 +142,14 @@ public final class ChestLogCommand {
                                 writer.enqueue(ChestLogEvent.adminRollback(System.currentTimeMillis(), adminId, packedPos, result.transactionCount()));
                                 boolean auditRejected = writer.isDisabled() || writer.getDroppedEventCount() > droppedBefore;
                                 if (auditRejected) {
-                                    source.sendSuccess(() -> Component.literal(String.format("§e[ChestLogger] Rollback applied, but audit event was rejected or dropped. restored=%d removed=%d", result.restoredItems(), result.removedItems())), true);
+                                    ComponentHelper.sendSuccess(source, String.format("§e[ChestLogger] Rollback applied, but audit event was rejected or dropped. restored=%d removed=%d", result.restoredItems(), result.removedItems()), true);
                                 } else {
-                                    source.sendSuccess(() -> Component.literal(String.format("§a[ChestLogger] Rollback committed: %d restored, %d removed, %d dropped (%d txs). Audit queued.", result.restoredItems(), result.removedItems(), result.droppedItems(), result.transactionCount())), true);
+                                    ComponentHelper.sendSuccess(source, String.format("§a[ChestLogger] Rollback committed: %d restored, %d removed, %d dropped (%d txs). Audit queued.", result.restoredItems(), result.removedItems(), result.droppedItems(), result.transactionCount()), true);
                                 }
                             }, world.getServer())
                             .exceptionally(ex -> {
                                 ChestLoggerMod.LOGGER.error("ChestLogCommand.rollback: async query failed", ex);
-                                source.sendFailure(Component.literal("§c[ChestLogger] Failed to query chest history for rollback: " + ex.getMessage()));
+                                ComponentHelper.sendFailure(source, "§c[ChestLogger] Failed to query chest history for rollback: " + ex.getMessage());
                                 return null;
                             });
                         return 1;
