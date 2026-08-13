@@ -48,29 +48,25 @@ public final class ChestLogRollback {
         return item.toString();
     }
 
-    private static Item getItemFromIdentifier(ResourceLocation id) {
-        if (id == null) return null;
+    private static Item getItemFromIdentifier(String itemIdStr) {
+        if (itemIdStr == null || itemIdStr.isEmpty()) return null;
         try {
-            return BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
-        } catch (Throwable t) {
-            try {
-                for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
-                    if (m.getName().equals("get") || m.getName().equals("getValue") || m.getName().equals("getOptional")) {
-                        if (m.getParameterCount() == 1 && m.getParameterTypes()[0] == ResourceLocation.class) {
-                            Object res = m.invoke(BuiltInRegistries.ITEM, id);
-                            if (res instanceof Item item) return item;
-                            if (res instanceof java.util.Optional opt) {
-                                Object inner = opt.orElse(null);
-                                if (inner instanceof net.minecraft.core.Holder h) {
-                                    return (Item) h.value();
-                                }
-                                if (inner instanceof Item item) return item;
-                            }
-                        }
-                    }
+            ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
+            if (id != null) {
+                Item item = BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
+                if (item != null && item != Items.AIR) return item;
+            }
+        } catch (Throwable ignored) {}
+
+        try {
+            for (Item item : BuiltInRegistries.ITEM) {
+                Object key = BuiltInRegistries.ITEM.getKey(item);
+                if (key != null && itemIdStr.equals(key.toString())) {
+                    return item;
                 }
-            } catch (Throwable ignored) {}
-        }
+            }
+        } catch (Throwable ignored) {}
+
         return null;
     }
 
@@ -132,9 +128,7 @@ public final class ChestLogRollback {
             int netInverse = entry.getValue();
             if (netInverse == 0) continue;
 
-            ResourceLocation id = ResourceLocation.tryParse(entry.getKey());
-            if (id == null) return Result.failure("Unresolvable Item Identifier: " + entry.getKey());
-            Item item = getItemFromIdentifier(id);
+            Item item = getItemFromIdentifier(entry.getKey());
             if (item == null) return Result.failure("Item missing from Registry: " + entry.getKey());
 
             if (netInverse < 0) {
