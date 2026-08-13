@@ -3,7 +3,7 @@
   "package": "com.yourserver.chestlogger.mixin",
   "compatibilityLevel": "JAVA_25",
   "mixins": [
-    "ScreenHandlerMixin"
+    "AbstractContainerMenuMixin"
   ],
   "injectors": {
     "defaultRequire": 1

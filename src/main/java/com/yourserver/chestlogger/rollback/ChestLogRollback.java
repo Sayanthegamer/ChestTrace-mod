@@ -2,6 +2,7 @@ package com.yourserver.chestlogger.rollback;
 
 import com.yourserver.chestlogger.ChestLoggerMod;
 import com.yourserver.chestlogger.logging.ChestLogEvent;
+import com.yourserver.chestlogger.util.ItemUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -32,38 +33,11 @@ public final class ChestLogRollback {
     }
 
     private static String getItemIdentifier(Item item) {
-        if (item == null) return "minecraft:air";
-
-        try {
-            Object loc = BuiltInRegistries.ITEM.getKey(item);
-            if (loc != null) return loc.toString();
-        } catch (Throwable ignored) {}
-
-        try {
-            Object loc = item.builtInRegistryHolder().key().location();
-            if (loc != null) return loc.toString();
-        } catch (Throwable ignored) {}
-
-        ChestLoggerMod.LOGGER.error("ChestLogger: Failed to resolve item identifier for item class {}; defaulting to minecraft:air to avoid logging an unparseable object string", item.getClass().getName());
-        return "minecraft:air";
+        return ItemUtils.getItemIdentifier(item);
     }
 
     private static Item getItemFromIdentifier(String itemIdStr) {
-        if (itemIdStr == null || itemIdStr.isEmpty() || itemIdStr.equals("minecraft:air")) {
-            return null;
-        }
-
-        try {
-            ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
-            if (id != null) {
-                Item resolved = BuiltInRegistries.ITEM.getValue(id);
-                if (resolved != null && resolved != Items.AIR) return resolved;
-            }
-        } catch (Throwable t) {
-            ChestLoggerMod.LOGGER.warn("Registry lookup exception for {}: {}", itemIdStr, t.getMessage());
-        }
-
-        return null;
+        return ItemUtils.getItemFromIdentifier(itemIdStr, null);
     }
 
     public static Result rollback(ServerLevel world, BlockPos pos, List<ChestLogEvent> events, long cutoffMillis) {

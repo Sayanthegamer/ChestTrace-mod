@@ -4,6 +4,7 @@ import com.yourserver.chestlogger.ChestLoggerMod;
 import com.yourserver.chestlogger.logging.ChestLogEvent;
 import com.yourserver.chestlogger.logging.ChestLogReader;
 import com.yourserver.chestlogger.rollback.ChestLogRollback;
+import com.yourserver.chestlogger.util.ItemUtils;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -255,11 +256,16 @@ public final class ChestLogGui implements MenuProvider {
 
                     int displayCount = Math.min(64, Math.max(1, Math.abs(e.countDiff)));
                     ItemStack icon = new ItemStack(item, displayCount);
+                    if (e.componentPatch != null && !e.componentPatch.isEmpty()) {
+                        try {
+                            icon.applyComponents(e.componentPatch);
+                        } catch (Throwable ignored) {}
+                    }
 
                     String prefix = e.countDiff > 0 ? "§a+" : "§c";
                     String actionStr = e.countDiff > 0 ? "§aAdded" : "§cRemoved";
 
-                    Component customName = Component.literal(prefix + Math.abs(e.countDiff) + "x " + getItemDisplayName(item));
+                    Component customName = Component.literal(prefix + Math.abs(e.countDiff) + "x " + getItemDisplayName(item)).withStyle(style -> style.withItalic(false));
 
                     List<Component> lore = new ArrayList<>();
                     lore.add(Component.literal("§7Action: " + actionStr));
@@ -371,39 +377,10 @@ public final class ChestLogGui implements MenuProvider {
     }
 
     private Item getItemFromIdentifier(String itemIdStr) {
-        if (itemIdStr == null || itemIdStr.isEmpty() || itemIdStr.equals("minecraft:air")) {
-            return Items.BARRIER;
-        }
-
-        try {
-            ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
-            if (id != null) {
-                Item resolved = BuiltInRegistries.ITEM.getValue(id);
-                if (resolved != null && resolved != Items.AIR) return resolved;
-            }
-        } catch (Throwable t) {
-            ChestLoggerMod.LOGGER.warn("Registry lookup exception for {}: {}", itemIdStr, t.getMessage());
-        }
-
-        return Items.BARRIER;
+        return ItemUtils.getItemFromIdentifier(itemIdStr, Items.BARRIER);
     }
 
     private String getItemDisplayName(Item item) {
-        if (item == null || item == Items.AIR) return "Air";
-        try {
-            Component nameComp = item.getName(new ItemStack(item));
-            if (nameComp != null) {
-                String str = nameComp.getString();
-                if (!str.isEmpty()) return str;
-            }
-        } catch (Throwable ignored) {}
-
-        String key = item.getDescriptionId();
-        int lastDot = key.lastIndexOf('.');
-        if (lastDot >= 0 && lastDot < key.length() - 1) {
-            String rawName = key.substring(lastDot + 1).replace('_', ' ');
-            return Character.toUpperCase(rawName.charAt(0)) + rawName.substring(1);
-        }
-        return key;
+        return ItemUtils.getItemDisplayName(item);
     }
 }

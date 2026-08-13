@@ -6,15 +6,14 @@ import com.yourserver.chestlogger.gui.ChestLogMenu;
 import com.yourserver.chestlogger.logging.ChestLogEvent;
 import com.yourserver.chestlogger.logging.ChestLogWriter;
 import com.yourserver.chestlogger.logging.TransactionIdGenerator;
+import com.yourserver.chestlogger.util.ItemUtils;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -29,7 +28,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Mixin(AbstractContainerMenu.class)
-public abstract class ScreenHandlerMixin {
+public abstract class AbstractContainerMenuMixin {
 
     private static final ThreadLocal<PendingClickSnapshot> PENDING_SNAPSHOT = new ThreadLocal<>();
 
@@ -118,27 +117,27 @@ public abstract class ScreenHandlerMixin {
                 String itemId = getItemIdentifier(newStack.getItem());
                 int countDiff = newStack.getCount();
                 ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click: +{} x {} at {}", countDiff, itemId, snapshot.pos.toShortString());
-                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags));
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags, ItemUtils.extractComponents(newStack)));
             } else if (!oldStack.isEmpty() && newStack.isEmpty()) {
                 String itemId = getItemIdentifier(oldStack.getItem());
                 int countDiff = -oldStack.getCount();
                 ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click: {} x {} at {}", countDiff, itemId, snapshot.pos.toShortString());
-                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags));
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags, ItemUtils.extractComponents(oldStack)));
             } else if (ItemStack.isSameItemSameComponents(oldStack, newStack)) {
                 int diff = newStack.getCount() - oldStack.getCount();
                 if (diff != 0) {
                     String itemId = getItemIdentifier(newStack.getItem());
                     ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click: {}{} x {} at {}", diff > 0 ? "+" : "", diff, itemId, snapshot.pos.toShortString());
-                    writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, diff, snapshot.flags));
+                    writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, diff, snapshot.flags, ItemUtils.extractComponents(newStack)));
                 }
             } else {
                 String oldItemId = getItemIdentifier(oldStack.getItem());
                 ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click swap remove: -{} x {} at {}", oldStack.getCount(), oldItemId, snapshot.pos.toShortString());
-                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, oldItemId, -oldStack.getCount(), snapshot.flags));
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, oldItemId, -oldStack.getCount(), snapshot.flags, ItemUtils.extractComponents(oldStack)));
 
                 String newItemId = getItemIdentifier(newStack.getItem());
                 ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click swap add: +{} x {} at {}", newStack.getCount(), newItemId, snapshot.pos.toShortString());
-                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, newItemId, newStack.getCount(), snapshot.flags));
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, newItemId, newStack.getCount(), snapshot.flags, ItemUtils.extractComponents(newStack)));
             }
         }
     }
@@ -158,20 +157,7 @@ public abstract class ScreenHandlerMixin {
     }
 
     private String getItemIdentifier(Item item) {
-        if (item == null) return "minecraft:air";
-
-        try {
-            Object loc = BuiltInRegistries.ITEM.getKey(item);
-            if (loc != null) return loc.toString();
-        } catch (Throwable ignored) {}
-
-        try {
-            Object loc = item.builtInRegistryHolder().key().location();
-            if (loc != null) return loc.toString();
-        } catch (Throwable ignored) {}
-
-        ChestLoggerMod.LOGGER.error("ChestLogger: Failed to resolve item identifier for item class {}; defaulting to minecraft:air to avoid logging an unparseable object string", item.getClass().getName());
-        return "minecraft:air";
+        return ItemUtils.getItemIdentifier(item);
     }
 
     private BlockPos getBlockPosFromContainer(Container container) {
