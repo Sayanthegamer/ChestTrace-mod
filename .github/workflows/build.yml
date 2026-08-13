@@ -14,16 +14,13 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
 
-      - name: Make Gradle wrapper executable
-        run: chmod +x ./gradlew
-
-      - name: Build and Remap
-        # This forces Fabric Loom to generate the remapped production JAR
-        run: ./gradlew build remapJar
+      - name: Build with Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          arguments: build
 
       - name: Upload Production Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ChestTrace-Production-JAR
-          # This regex strictly grabs the remapped JAR and ignores the broken -dev and -sources files
           path: build/libs/*[!dev][!sources].jar
