@@ -10,6 +10,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.Container;
@@ -54,8 +55,9 @@ public final class ChestLogGui implements MenuProvider {
         }
         BlockPos targetPos = pos;
         try {
-            if (player.serverLevel() != null) {
-                net.minecraft.world.level.block.entity.BlockEntity be = player.serverLevel().getBlockEntity(pos);
+            ServerLevel level = getServerLevel(player);
+            if (level != null) {
+                net.minecraft.world.level.block.entity.BlockEntity be = level.getBlockEntity(pos);
                 if (be instanceof Container c) {
                     BlockPos p = getBlockPosFromContainer(c);
                     if (p != null) targetPos = p;
@@ -121,6 +123,19 @@ public final class ChestLogGui implements MenuProvider {
         return null;
     }
 
+    private static ServerLevel getServerLevel(ServerPlayer player) {
+        if (player == null) return null;
+        try {
+            if (player.level() instanceof ServerLevel sl) {
+                return sl;
+            }
+        } catch (Throwable ignored) {}
+        try {
+            return player.serverLevel();
+        } catch (Throwable ignored) {}
+        return null;
+    }
+
     private static MinecraftServer getServer(ServerPlayer player) {
         if (ChestLoggerMod.server() != null) {
             return ChestLoggerMod.server();
@@ -130,7 +145,8 @@ public final class ChestLogGui implements MenuProvider {
             return player.getServer();
         } catch (Throwable t1) {
             try {
-                return player.serverLevel().getServer();
+                ServerLevel sl = getServerLevel(player);
+                if (sl != null) return sl.getServer();
             } catch (Throwable t2) {
                 try {
                     return player.server;
@@ -146,6 +162,7 @@ public final class ChestLogGui implements MenuProvider {
                 }
             }
         }
+        return null;
     }
 
     @Override
@@ -324,7 +341,12 @@ public final class ChestLogGui implements MenuProvider {
                 serverPlayer.closeContainer();
                 serverPlayer.sendSystemMessage(Component.literal("§7[ChestLogger] Executing GUI 5m rollback for " + chestPos.toShortString() + "..."));
                 long cutoff = System.currentTimeMillis() - 300_000L;
-                ChestLogRollback.Result res = ChestLogRollback.rollback(serverPlayer.serverLevel(), chestPos, rawEvents, cutoff);
+                ServerLevel level = getServerLevel(serverPlayer);
+                if (level == null) {
+                    serverPlayer.sendSystemMessage(Component.literal("§c[ChestLogger] Rollback Failed: Could not resolve ServerLevel."));
+                    return true;
+                }
+                ChestLogRollback.Result res = ChestLogRollback.rollback(level, chestPos, rawEvents, cutoff);
                 if (res.success()) {
                     serverPlayer.sendSystemMessage(Component.literal(String.format("§a[ChestLogger] GUI Rollback committed: %d restored, %d removed (%d txs).", res.restoredItems(), res.removedItems(), res.transactionCount())));
                 } else {
@@ -349,29 +371,65 @@ public final class ChestLogGui implements MenuProvider {
     }
 
     private Item getItemFromIdentifier(String itemIdStr) {
-        if (itemIdStr == null || itemIdStr.isEmpty()) return Items.BARRIER;
+        if (itemIdStr == null || itemIdStr.isEmpty() || itemIdStr.equals("minecraft:air")) {
+            return Items.BARRIER;
+        }
+
         try {
             ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
             if (id != null) {
-                Item item = BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
-                if (item != null && item != Items.AIR) return item;
+                Object res = BuiltInRegistries.ITEM.get(id);
+                Item resolved = extractItemFromObject(res);
+                if (resolved != null && resolved != Items.AIR) return resolved;
+
+                res = BuiltInRegistries.ITEM.getValue(id);
+                resolved = extractItemFromObject(res);
+                if (resolved != null && resolved != Items.AIR) return resolved;
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            ChestLoggerMod.LOGGER.warn("Primary registry lookup exception for {}: {}", itemIdStr, t.getMessage());
+        }
 
         try {
             for (Item item : BuiltInRegistries.ITEM) {
-                Object key = BuiltInRegistries.ITEM.getKey(item);
-                if (key != null && itemIdStr.equals(key.toString())) {
+                if (item == null || item == Items.AIR) continue;
+                Object keyObj = BuiltInRegistries.ITEM.getKey(item);
+                if (keyObj != null && itemIdStr.equals(keyObj.toString())) {
                     return item;
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable t) {
+            ChestLoggerMod.LOGGER.warn("Iteration registry lookup exception for {}: {}", itemIdStr, t.getMessage());
+        }
 
         return Items.BARRIER;
     }
 
+    private static Item extractItemFromObject(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Item item) {
+            return item;
+        }
+        if (obj instanceof java.util.Optional<?> opt) {
+            return opt.isPresent() ? extractItemFromObject(opt.get()) : null;
+        }
+        if (obj instanceof net.minecraft.core.Holder<?> holder) {
+            Object val = holder.value();
+            if (val instanceof Item item) return item;
+        }
+        return null;
+    }
+
     private String getItemDisplayName(Item item) {
         if (item == null || item == Items.AIR) return "Air";
+        try {
+            Component nameComp = item.getName(new ItemStack(item));
+            if (nameComp != null) {
+                String str = nameComp.getString();
+                if (!str.isEmpty()) return str;
+            }
+        } catch (Throwable ignored) {}
+
         String key = item.getDescriptionId();
         int lastDot = key.lastIndexOf('.');
         if (lastDot >= 0 && lastDot < key.length() - 1) {

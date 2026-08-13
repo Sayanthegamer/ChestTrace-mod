@@ -50,24 +50,48 @@ public final class ChestLogRollback {
     }
 
     private static Item getItemFromIdentifier(String itemIdStr) {
-        if (itemIdStr == null || itemIdStr.isEmpty()) return null;
+        if (itemIdStr == null || itemIdStr.isEmpty() || itemIdStr.equals("minecraft:air")) {
+            return null;
+        }
+
         try {
             ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
             if (id != null) {
-                Item item = BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
-                if (item != null && item != Items.AIR) return item;
+                Object res = BuiltInRegistries.ITEM.get(id);
+                Item resolved = extractItemFromObject(res);
+                if (resolved != null && resolved != Items.AIR) return resolved;
+
+                res = BuiltInRegistries.ITEM.getValue(id);
+                resolved = extractItemFromObject(res);
+                if (resolved != null && resolved != Items.AIR) return resolved;
             }
         } catch (Throwable ignored) {}
 
         try {
             for (Item item : BuiltInRegistries.ITEM) {
-                Object key = BuiltInRegistries.ITEM.getKey(item);
-                if (key != null && itemIdStr.equals(key.toString())) {
+                if (item == null || item == Items.AIR) continue;
+                Object keyObj = BuiltInRegistries.ITEM.getKey(item);
+                if (keyObj != null && itemIdStr.equals(keyObj.toString())) {
                     return item;
                 }
             }
         } catch (Throwable ignored) {}
 
+        return null;
+    }
+
+    private static Item extractItemFromObject(Object obj) {
+        if (obj == null) return null;
+        if (obj instanceof Item item) {
+            return item;
+        }
+        if (obj instanceof java.util.Optional<?> opt) {
+            return opt.isPresent() ? extractItemFromObject(opt.get()) : null;
+        }
+        if (obj instanceof net.minecraft.core.Holder<?> holder) {
+            Object val = holder.value();
+            if (val instanceof Item item) return item;
+        }
         return null;
     }
 
