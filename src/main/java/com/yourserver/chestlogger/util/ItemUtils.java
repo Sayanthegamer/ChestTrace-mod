@@ -1,5 +1,6 @@
 package com.yourserver.chestlogger.util;
 
+import com.yourserver.chestlogger.ChestLoggerMod;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -28,7 +29,9 @@ public final class ItemUtils {
                         return blockLoc.toString();
                     }
                 }
-            } catch (Throwable ignored) {}
+            } catch (Throwable e) {
+                ChestLoggerMod.LOGGER.error("Identifier resolution crashed during BlockItem lookup for item class {}: ", item.getClass().getName(), e);
+            }
         }
 
         // 2. Standard Item lookup (Safe Path Comparison)
@@ -37,15 +40,20 @@ public final class ItemUtils {
             if (loc != null && !loc.getPath().equals("air")) {
                 return loc.toString();
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            ChestLoggerMod.LOGGER.error("Identifier resolution crashed during Item lookup for item class {}: ", item.getClass().getName(), e);
+        }
 
         // 3. Fallback to built-in holder
         try {
             if (item.builtInRegistryHolder() != null && item.builtInRegistryHolder().isBound()) {
                 return item.builtInRegistryHolder().key().location().toString();
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            ChestLoggerMod.LOGGER.error("Identifier resolution crashed during builtInRegistryHolder lookup for item class {}: ", item.getClass().getName(), e);
+        }
 
+        ChestLoggerMod.LOGGER.error("ChestLogger: Failed to resolve item identifier for item class {}; defaulting to minecraft:air to avoid logging an unparseable object string", item.getClass().getName());
         return "minecraft:air";
     }
 
@@ -67,7 +75,9 @@ public final class ItemUtils {
                     return block.asItem();
                 }
             }
-        } catch (Throwable ignored) {}
+        } catch (Throwable e) {
+            ChestLoggerMod.LOGGER.error("getItemFromIdentifier failed for {}: ", itemIdStr, e);
+        }
 
         return fallback;
     }
