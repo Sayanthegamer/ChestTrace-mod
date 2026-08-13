@@ -94,7 +94,12 @@ public final class ChestLogCommand {
                                         e.playerId == null ? "unknown" : e.playerId.toString().substring(0, 8),
                                         action, e.itemId, e.transactionId)), false);
                                 }
-                            }, source.getServer());
+                            }, source.getServer())
+                            .exceptionally(ex -> {
+                                ChestLoggerMod.LOGGER.error("ChestLogCommand.inspect: async query failed", ex);
+                                source.sendFailure(Component.literal("§c[ChestLogger] Failed to query chest history: " + ex.getMessage()));
+                                return null;
+                            });
                         return 1;
                     })));
 
@@ -110,8 +115,8 @@ public final class ChestLogCommand {
                         long packedPos = pos.asLong();
                         Path logDir = ChestLoggerMod.logDirectory();
                         ChestLogWriter writer = ChestLoggerMod.writer();
-                        if (writer.isDisabled()) {
-                            source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active. Zero changes made."));
+                        if (writer == null || writer.isDisabled()) {
+                            source.sendFailure(Component.literal("§c[ChestLogger] Rollback Aborted: Writer circuit breaker active or engine uninitialized. Zero changes made."));
                             return 0;
                         }
                         source.sendSuccess(() -> Component.literal("§7[ChestLogger] Querying transactions off-thread..."), false);
@@ -139,7 +144,12 @@ public final class ChestLogCommand {
                                 } else {
                                     source.sendSuccess(() -> Component.literal(String.format("§a[ChestLogger] Rollback committed: %d restored, %d removed, %d dropped (%d txs). Audit queued.", result.restoredItems(), result.removedItems(), result.droppedItems(), result.transactionCount())), true);
                                 }
-                            }, world.getServer());
+                            }, world.getServer())
+                            .exceptionally(ex -> {
+                                ChestLoggerMod.LOGGER.error("ChestLogCommand.rollback: async query failed", ex);
+                                source.sendFailure(Component.literal("§c[ChestLogger] Failed to query chest history for rollback: " + ex.getMessage()));
+                                return null;
+                            });
                         return 1;
                     })));
 

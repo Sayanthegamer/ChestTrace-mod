@@ -61,6 +61,9 @@ public final class ChestLogGui implements MenuProvider {
                     if (server != null) {
                         server.execute(() -> {
                             try {
+                                if (!query.isComplete()) {
+                                    player.sendSystemMessage(Component.literal("§e[ChestLogger] Warning: Historical read incomplete. Failed segment files: " + query.failedSegments().size()));
+                                }
                                 ChestLogGui gui = new ChestLogGui(pos, query.events());
                                 player.openMenu(gui);
                             } catch (Throwable t) {
@@ -72,6 +75,11 @@ public final class ChestLogGui implements MenuProvider {
                 } catch (Throwable t) {
                     ChestLoggerMod.LOGGER.error("Failed to schedule openMenu task on server thread", t);
                 }
+            })
+            .exceptionally(ex -> {
+                ChestLoggerMod.LOGGER.error("ChestLogGui.open: async query failed", ex);
+                player.sendSystemMessage(Component.literal("§c[ChestLogger] Failed to load chest history: " + ex.getMessage()));
+                return null;
             });
     }
 

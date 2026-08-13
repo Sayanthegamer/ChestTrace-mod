@@ -1,5 +1,6 @@
 package com.yourserver.chestlogger.logging;
 
+import com.yourserver.chestlogger.ChestLoggerMod;
 import net.jpountz.lz4.LZ4Factory;
 import net.jpountz.lz4.LZ4FastDecompressor;
 
@@ -26,8 +27,8 @@ public final class ChestLogReader {
     ) {}
 
     public static QueryResult queryAll(Path logDir, ChestLogWriter writer, long targetBlockPos) {
-        if (writer.isDisabled()) {
-            return new QueryResult(Collections.emptyList(), false, List.of(logDir));
+        if (writer == null || writer.isDisabled()) {
+            return new QueryResult(Collections.emptyList(), false, logDir != null ? List.of(logDir) : Collections.emptyList());
         }
 
         List<ChestLogEvent> combined = new ArrayList<>();
@@ -40,7 +41,7 @@ public final class ChestLogReader {
                 ? writer.getCurrentSegmentDate() + ".chlog"
                 : "";
 
-        if (Files.exists(logDir)) {
+        if (logDir != null && Files.exists(logDir)) {
             try (var stream = Files.list(logDir)) {
                 List<Path> files = stream.filter(p -> p.toString().endsWith(".chlog"))
                       .filter(p -> !p.getFileName().toString().equals(activeFileName))
@@ -49,12 +50,14 @@ public final class ChestLogReader {
                 for (Path path : files) {
                     try {
                         combined.addAll(readEventsFromDisk(path, targetBlockPos));
-                    } catch (Exception e) {
+                    } catch (Throwable e) {
+                        ChestLoggerMod.LOGGER.error("Failed to read log segment file: " + path, e);
                         isComplete = false;
                         failedSegments.add(path);
                     }
                 }
-            } catch (IOException e) {
+            } catch (Throwable e) {
+                ChestLoggerMod.LOGGER.error("Failed to list log directory: " + logDir, e);
                 isComplete = false;
             }
         }
