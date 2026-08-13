@@ -58,22 +58,26 @@ public final class ChestLogGui implements MenuProvider {
             .thenAccept(query -> {
                 try {
                     MinecraftServer server = getServer(player);
-                    if (server != null) {
-                        server.execute(() -> {
-                            try {
-                                if (!query.isComplete()) {
-                                    player.sendSystemMessage(Component.literal("§e[ChestLogger] Warning: Historical read incomplete. Failed segment files: " + query.failedSegments().size()));
-                                }
-                                ChestLogGui gui = new ChestLogGui(pos, query.events());
-                                player.openMenu(gui);
-                            } catch (Throwable t) {
-                                ChestLoggerMod.LOGGER.error("Failed to populate/open ChestLogGui", t);
-                                player.sendSystemMessage(Component.literal("§c[ChestLogger] Error opening GUI: " + t.getMessage()));
-                            }
-                        });
+                    if (server == null) {
+                        ChestLoggerMod.LOGGER.error("ChestLogGui.open: Could not resolve MinecraftServer for player {}", player.getName().getString());
+                        player.sendSystemMessage(Component.literal("§c[ChestLogger] Internal error: Could not resolve server instance."));
+                        return;
                     }
+                    server.execute(() -> {
+                        try {
+                            if (!query.isComplete()) {
+                                player.sendSystemMessage(Component.literal("§e[ChestLogger] Warning: Historical read incomplete. Failed segment files: " + query.failedSegments().size()));
+                            }
+                            ChestLogGui gui = new ChestLogGui(pos, query.events());
+                            player.openMenu(gui);
+                        } catch (Throwable t) {
+                            ChestLoggerMod.LOGGER.error("Failed to populate/open ChestLogGui", t);
+                            player.sendSystemMessage(Component.literal("§c[ChestLogger] Error opening GUI: " + t.getMessage()));
+                        }
+                    });
                 } catch (Throwable t) {
                     ChestLoggerMod.LOGGER.error("Failed to schedule openMenu task on server thread", t);
+                    player.sendSystemMessage(Component.literal("§c[ChestLogger] Scheduling error: " + t.getMessage()));
                 }
             })
             .exceptionally(ex -> {
@@ -86,13 +90,13 @@ public final class ChestLogGui implements MenuProvider {
     private static MinecraftServer getServer(ServerPlayer player) {
         if (player == null) return null;
         try {
-            return player.serverLevel().getServer();
+            return player.getServer();
         } catch (Throwable t1) {
             try {
-                return (MinecraftServer) player.getClass().getMethod("getServer").invoke(player);
+                return player.serverLevel().getServer();
             } catch (Throwable t2) {
                 try {
-                    return (MinecraftServer) player.getClass().getField("server").get(player);
+                    return player.server;
                 } catch (Throwable t3) {
                     return null;
                 }
