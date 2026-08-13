@@ -128,7 +128,9 @@ public final class ChestLogGui implements MenuProvider {
         } catch (Throwable t) {
             ChestLoggerMod.LOGGER.error("Error populating ChestLogGui container slots", t);
             if (player instanceof ServerPlayer sp) {
-                sp.sendSystemMessage(Component.literal("§c[ChestLogger] GUI Populate Error: " + t.getMessage()));
+                sp.sendSystemMessage(Component.literal("§c[ChestLogger] GUI Populate Error: "
+                    + t.getClass().getSimpleName() + ": " + t.getMessage()
+                    + (t.getCause() != null ? " | caused by " + t.getCause() : "")));
             }
         }
         return menu;
@@ -150,34 +152,38 @@ public final class ChestLogGui implements MenuProvider {
             int end = Math.min(start + PAGE_SIZE, aggregatedEntries.size());
 
             for (int i = start; i < end; i++) {
-                ChestLogAggregator.AggregatedEntry entry = aggregatedEntries.get(i);
-                int slotIndex = i - start;
-
-                Item item = getItemFromIdentifier(ResourceLocation.tryParse(entry.itemId()));
-                if (item == null || item == Items.AIR) item = Items.BARRIER;
-
-                int displayCount = Math.min(64, Math.max(1, Math.abs(entry.netCountDiff())));
-                ItemStack icon = new ItemStack(item, displayCount);
-
-                String prefix = entry.netCountDiff() > 0 ? "§a+" : "§c";
-                String actionStr = entry.netCountDiff() > 0 ? "§aAdded / Restored" : "§cRemoved";
-
-                Component customName = Component.literal(prefix + Math.abs(entry.netCountDiff()) + "x " + getItemDisplayName(item));
-
-                List<Component> lore = new ArrayList<>();
-                lore.add(Component.literal("§7Action: " + actionStr));
-                lore.add(Component.literal("§7Player: §f" + (entry.playerId() != null ? entry.playerId().toString().substring(0, 8) : "unknown")));
-                lore.add(Component.literal("§7Latest: §f" + df.format(new Date(entry.latestTimestamp()))));
-                lore.add(Component.literal("§7Events Merged: §f" + entry.eventCount()));
-
                 try {
-                    icon.set(DataComponents.CUSTOM_NAME, customName);
-                    icon.set(DataComponents.LORE, new ItemLore(lore));
-                } catch (Throwable t) {
-                    ChestLoggerMod.LOGGER.warn("Failed to set item components for " + item, t);
-                }
+                    ChestLogAggregator.AggregatedEntry entry = aggregatedEntries.get(i);
+                    int slotIndex = i - start;
 
-                menu.getContainer().setItem(slotIndex, icon);
+                    Item item = getItemFromIdentifier(ResourceLocation.tryParse(entry.itemId()));
+                    if (item == null || item == Items.AIR) item = Items.BARRIER;
+
+                    int displayCount = Math.min(64, Math.max(1, Math.abs(entry.netCountDiff())));
+                    ItemStack icon = new ItemStack(item, displayCount);
+
+                    String prefix = entry.netCountDiff() > 0 ? "§a+" : "§c";
+                    String actionStr = entry.netCountDiff() > 0 ? "§aAdded / Restored" : "§cRemoved";
+
+                    Component customName = Component.literal(prefix + Math.abs(entry.netCountDiff()) + "x " + getItemDisplayName(item));
+
+                    List<Component> lore = new ArrayList<>();
+                    lore.add(Component.literal("§7Action: " + actionStr));
+                    lore.add(Component.literal("§7Player: §f" + (entry.playerId() != null ? entry.playerId().toString().substring(0, 8) : "unknown")));
+                    lore.add(Component.literal("§7Latest: §f" + df.format(new Date(entry.latestTimestamp()))));
+                    lore.add(Component.literal("§7Events Merged: §f" + entry.eventCount()));
+
+                    try {
+                        icon.set(DataComponents.CUSTOM_NAME, customName);
+                        icon.set(DataComponents.LORE, new ItemLore(lore));
+                    } catch (Throwable t) {
+                        ChestLoggerMod.LOGGER.warn("Failed to set item components for " + item, t);
+                    }
+
+                    menu.getContainer().setItem(slotIndex, icon);
+                } catch (Throwable itemError) {
+                    ChestLoggerMod.LOGGER.warn("Skipping malformed history entry at index " + i, itemError);
+                }
             }
         } else {
             // Raw mode
@@ -189,34 +195,38 @@ public final class ChestLogGui implements MenuProvider {
             int end = Math.min(start + PAGE_SIZE, nonAdmin.size());
 
             for (int i = start; i < end; i++) {
-                ChestLogEvent e = nonAdmin.get(i);
-                int slotIndex = i - start;
-
-                Item item = getItemFromIdentifier(ResourceLocation.tryParse(e.itemId));
-                if (item == null || item == Items.AIR) item = Items.BARRIER;
-
-                int displayCount = Math.min(64, Math.max(1, Math.abs(e.countDiff)));
-                ItemStack icon = new ItemStack(item, displayCount);
-
-                String prefix = e.countDiff > 0 ? "§a+" : "§c";
-                String actionStr = e.countDiff > 0 ? "§aAdded" : "§cRemoved";
-
-                Component customName = Component.literal(prefix + Math.abs(e.countDiff) + "x " + getItemDisplayName(item));
-
-                List<Component> lore = new ArrayList<>();
-                lore.add(Component.literal("§7Action: " + actionStr));
-                lore.add(Component.literal("§7Player: §f" + (e.playerId != null ? e.playerId.toString().substring(0, 8) : "unknown")));
-                lore.add(Component.literal("§7Time: §f" + df.format(new Date(e.timestampMillis))));
-                lore.add(Component.literal("§8Tx ID: #" + e.transactionId));
-
                 try {
-                    icon.set(DataComponents.CUSTOM_NAME, customName);
-                    icon.set(DataComponents.LORE, new ItemLore(lore));
-                } catch (Throwable t) {
-                    ChestLoggerMod.LOGGER.warn("Failed to set raw item components for " + item, t);
-                }
+                    ChestLogEvent e = nonAdmin.get(i);
+                    int slotIndex = i - start;
 
-                menu.getContainer().setItem(slotIndex, icon);
+                    Item item = getItemFromIdentifier(ResourceLocation.tryParse(e.itemId));
+                    if (item == null || item == Items.AIR) item = Items.BARRIER;
+
+                    int displayCount = Math.min(64, Math.max(1, Math.abs(e.countDiff)));
+                    ItemStack icon = new ItemStack(item, displayCount);
+
+                    String prefix = e.countDiff > 0 ? "§a+" : "§c";
+                    String actionStr = e.countDiff > 0 ? "§aAdded" : "§cRemoved";
+
+                    Component customName = Component.literal(prefix + Math.abs(e.countDiff) + "x " + getItemDisplayName(item));
+
+                    List<Component> lore = new ArrayList<>();
+                    lore.add(Component.literal("§7Action: " + actionStr));
+                    lore.add(Component.literal("§7Player: §f" + (e.playerId != null ? e.playerId.toString().substring(0, 8) : "unknown")));
+                    lore.add(Component.literal("§7Time: §f" + df.format(new Date(e.timestampMillis))));
+                    lore.add(Component.literal("§8Tx ID: #" + e.transactionId));
+
+                    try {
+                        icon.set(DataComponents.CUSTOM_NAME, customName);
+                        icon.set(DataComponents.LORE, new ItemLore(lore));
+                    } catch (Throwable t) {
+                        ChestLoggerMod.LOGGER.warn("Failed to set raw item components for " + item, t);
+                    }
+
+                    menu.getContainer().setItem(slotIndex, icon);
+                } catch (Throwable itemError) {
+                    ChestLoggerMod.LOGGER.warn("Skipping malformed raw history entry at index " + i, itemError);
+                }
             }
         }
 
@@ -307,9 +317,13 @@ public final class ChestLogGui implements MenuProvider {
     private Item getItemFromIdentifier(ResourceLocation id) {
         if (id == null) return Items.BARRIER;
         try {
-            Item item = BuiltInRegistries.ITEM.getValue(id);
+            Item item = BuiltInRegistries.ITEM.get(id).map(net.minecraft.core.Holder::value).orElse(null);
             if (item != null && item != Items.AIR) return item;
         } catch (Throwable t) {
+            try {
+                Item item = BuiltInRegistries.ITEM.getValue(id);
+                if (item != null && item != Items.AIR) return item;
+            } catch (Throwable ignored) {}
             try {
                 for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
                     if ((m.getName().equals("get") || m.getName().equals("getValue") || m.getName().equals("getOptional"))
