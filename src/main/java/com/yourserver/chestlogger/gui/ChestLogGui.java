@@ -88,6 +88,9 @@ public final class ChestLogGui implements MenuProvider {
     }
 
     private static MinecraftServer getServer(ServerPlayer player) {
+        if (ChestLoggerMod.server() != null) {
+            return ChestLoggerMod.server();
+        }
         if (player == null) return null;
         try {
             return player.getServer();
@@ -98,6 +101,13 @@ public final class ChestLogGui implements MenuProvider {
                 try {
                     return player.server;
                 } catch (Throwable t3) {
+                    try {
+                        for (java.lang.reflect.Method m : player.getClass().getMethods()) {
+                            if (m.getParameterCount() == 0 && MinecraftServer.class.isAssignableFrom(m.getReturnType())) {
+                                return (MinecraftServer) m.invoke(player);
+                            }
+                        }
+                    } catch (Throwable ignored) {}
                     return null;
                 }
             }
