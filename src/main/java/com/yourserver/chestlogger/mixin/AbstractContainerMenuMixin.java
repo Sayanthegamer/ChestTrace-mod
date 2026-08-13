@@ -27,7 +27,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import java.util.ArrayList;
 import java.util.List;
 
-@Mixin(AbstractContainerMenu.class)
+@Mixin(targets = {"net.minecraft.world.inventory.AbstractContainerMenu", "net.minecraft.class_1703"}, remap = false)
 public abstract class AbstractContainerMenuMixin {
 
     private static final ThreadLocal<PendingClickSnapshot> PENDING_SNAPSHOT = new ThreadLocal<>();
