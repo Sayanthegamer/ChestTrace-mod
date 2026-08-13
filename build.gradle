@@ -49,7 +49,3 @@ jar {
         rename "${it}_${base.archivesName.get()}", "${it}"
     }
 }
-
-remapJar {
-    targetNamespace = 'named'
-}
