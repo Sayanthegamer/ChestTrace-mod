@@ -50,9 +50,21 @@ public final class ChestLogGui implements MenuProvider {
             player.sendSystemMessage(Component.literal("§c[ChestLogger] Error: Engine writer is not initialized."));
             return;
         }
-        long packedPos = pos.asLong();
+        BlockPos targetPos = pos;
+        try {
+            if (player.serverLevel() != null) {
+                net.minecraft.world.level.block.entity.BlockEntity be = player.serverLevel().getBlockEntity(pos);
+                if (be instanceof Container c) {
+                    BlockPos p = getBlockPosFromContainer(c);
+                    if (p != null) targetPos = p;
+                }
+            }
+        } catch (Throwable ignored) {}
+
+        long packedPos = targetPos.asLong();
         Path logDir = ChestLoggerMod.logDirectory();
-        player.sendSystemMessage(Component.literal("§7[ChestLogger] Loading history GUI for " + pos.toShortString() + "..."));
+        final BlockPos finalPos = targetPos;
+        player.sendSystemMessage(Component.literal("§7[ChestLogger] Loading history GUI for " + targetPos.toShortString() + "..."));
 
         CompletableFuture.supplyAsync(() -> ChestLogReader.queryAll(logDir, ChestLoggerMod.writer(), packedPos))
             .thenAccept(query -> {
@@ -68,7 +80,7 @@ public final class ChestLogGui implements MenuProvider {
                             if (!query.isComplete()) {
                                 player.sendSystemMessage(Component.literal("§e[ChestLogger] Warning: Historical read incomplete. Failed segment files: " + query.failedSegments().size()));
                             }
-                            ChestLogGui gui = new ChestLogGui(pos, query.events());
+                            ChestLogGui gui = new ChestLogGui(finalPos, query.events());
                             player.openMenu(gui);
                         } catch (Throwable t) {
                             ChestLoggerMod.LOGGER.error("Failed to populate/open ChestLogGui", t);
@@ -85,6 +97,26 @@ public final class ChestLogGui implements MenuProvider {
                 player.sendSystemMessage(Component.literal("§c[ChestLogger] Failed to load chest history: " + ex.getMessage()));
                 return null;
             });
+    }
+
+    private static BlockPos getBlockPosFromContainer(Container container) {
+        if (container instanceof net.minecraft.world.level.block.entity.BlockEntity be) {
+            return be.getBlockPos();
+        }
+        if (container instanceof CompoundContainer cc) {
+            try {
+                for (java.lang.reflect.Field f : CompoundContainer.class.getDeclaredFields()) {
+                    if (Container.class.isAssignableFrom(f.getType())) {
+                        f.setAccessible(true);
+                        Object subContainer = f.get(cc);
+                        if (subContainer instanceof net.minecraft.world.level.block.entity.BlockEntity be) {
+                            return be.getBlockPos();
+                        }
+                    }
+                }
+            } catch (Throwable ignored) {}
+        }
+        return null;
     }
 
     private static MinecraftServer getServer(ServerPlayer player) {

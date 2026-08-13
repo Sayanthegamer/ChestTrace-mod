@@ -14,7 +14,6 @@ import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -25,8 +24,23 @@ import org.spongepowered.asm.mixin.injection.Coerce;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Mixin(AbstractContainerMenu.class)
 public abstract class ScreenHandlerMixin {
+
+    private static final ThreadLocal<PendingClickSnapshot> PENDING_SNAPSHOT = new ThreadLocal<>();
+
+    private record SlotState(int slotIndex, ItemStack copy) {}
+
+    private record PendingClickSnapshot(
+        Container container,
+        BlockPos pos,
+        Player player,
+        byte flags,
+        List<SlotState> beforeStates
+    ) {}
 
     @Inject(method = "clicked", at = @At("HEAD"), cancellable = true)
     private void onSlotClickIntercept(int slotIndex, int button, @Coerce Object clickType, Player player, CallbackInfo ci) {
@@ -46,29 +60,14 @@ public abstract class ScreenHandlerMixin {
 
         ChestLogWriter writer = ChestLoggerMod.writer();
         if (writer == null || writer.isDisabled()) return;
-        if (slotIndex < 0) return;
-        if (slotIndex >= menu.slots.size()) return;
 
-        Slot slot = menu.slots.get(slotIndex);
-        if (slot == null) return;
+        Container chestContainer = getChestContainer(menu);
+        if (chestContainer == null) return;
 
-        Container container = slot.container;
-        BlockPos pos = getBlockPosFromContainer(container);
-
-        // Fallback: If clicked slot is player inventory (e.g. shift-clicking into chest), resolve position from ChestMenu container
-        if (pos == null && menu instanceof ChestMenu chestMenu) {
-            pos = getBlockPosFromContainer(chestMenu.getContainer());
-        }
-
+        BlockPos pos = getBlockPosFromContainer(chestContainer);
         if (pos == null) return;
 
-        ItemStack slotStack = slot.getItem();
-        ItemStack carriedStack = menu.getCarried();
-
-        String itemId = null;
-        int countDiff = 0;
         byte flags = 0;
-
         String clickStr = clickType != null ? clickType.toString() : "";
         if (clickStr.contains("QUICK_MOVE")) {
             flags |= ChestLogEvent.Flags.SHIFT_CLICK;
@@ -76,32 +75,80 @@ public abstract class ScreenHandlerMixin {
             flags |= ChestLogEvent.Flags.DRAG;
         }
 
-        // Determine if items are being removed from or added to the chest
-        if (!slotStack.isEmpty()) {
-            // Taking from chest slot
-            itemId = getItemIdentifier(slotStack.getItem());
-            countDiff = -slotStack.getCount();
-        } else if (carriedStack != null && !carriedStack.isEmpty()) {
-            // Placing into empty chest slot
-            itemId = getItemIdentifier(carriedStack.getItem());
-            countDiff = carriedStack.getCount();
+        List<SlotState> beforeStates = new ArrayList<>();
+        for (int i = 0; i < menu.slots.size(); i++) {
+            Slot slot = menu.slots.get(i);
+            if (slot != null && slot.container == chestContainer) {
+                beforeStates.add(new SlotState(i, slot.getItem().copy()));
+            }
         }
 
-        if (itemId == null || countDiff == 0) return;
+        if (!beforeStates.isEmpty()) {
+            PENDING_SNAPSHOT.set(new PendingClickSnapshot(chestContainer, pos, player, flags, beforeStates));
+        }
+    }
 
-        long packedPos = pos.asLong();
+    @Inject(method = "clicked", at = @At("TAIL"))
+    private void onSlotClickTail(int slotIndex, int button, @Coerce Object clickType, Player player, CallbackInfo ci) {
+        PendingClickSnapshot snapshot = PENDING_SNAPSHOT.get();
+        PENDING_SNAPSHOT.remove();
+
+        if (snapshot == null) return;
+
+        ChestLogWriter writer = ChestLoggerMod.writer();
+        if (writer == null || writer.isDisabled()) return;
+
+        AbstractContainerMenu menu = (AbstractContainerMenu) (Object) this;
         long timestamp = System.currentTimeMillis();
         long txId = TransactionIdGenerator.next();
+        long packedPos = snapshot.pos.asLong();
 
-        writer.enqueue(new ChestLogEvent(
-            timestamp,
-            txId,
-            player.getUUID(),
-            packedPos,
-            itemId,
-            countDiff,
-            flags
-        ));
+        for (SlotState before : snapshot.beforeStates) {
+            if (before.slotIndex >= menu.slots.size()) continue;
+            Slot slot = menu.slots.get(before.slotIndex);
+            if (slot == null || slot.container != snapshot.container) continue;
+
+            ItemStack oldStack = before.copy;
+            ItemStack newStack = slot.getItem();
+
+            if (oldStack.isEmpty() && newStack.isEmpty()) continue;
+
+            if (oldStack.isEmpty() && !newStack.isEmpty()) {
+                String itemId = getItemIdentifier(newStack.getItem());
+                int countDiff = newStack.getCount();
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags));
+            } else if (!oldStack.isEmpty() && newStack.isEmpty()) {
+                String itemId = getItemIdentifier(oldStack.getItem());
+                int countDiff = -oldStack.getCount();
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags));
+            } else if (ItemStack.isSameItemSameComponents(oldStack, newStack)) {
+                int diff = newStack.getCount() - oldStack.getCount();
+                if (diff != 0) {
+                    String itemId = getItemIdentifier(newStack.getItem());
+                    writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, diff, snapshot.flags));
+                }
+            } else {
+                String oldItemId = getItemIdentifier(oldStack.getItem());
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, oldItemId, -oldStack.getCount(), snapshot.flags));
+
+                String newItemId = getItemIdentifier(newStack.getItem());
+                writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, newItemId, newStack.getCount(), snapshot.flags));
+            }
+        }
+    }
+
+    private Container getChestContainer(AbstractContainerMenu menu) {
+        if (menu instanceof ChestMenu chestMenu) {
+            return chestMenu.getContainer();
+        }
+        for (Slot slot : menu.slots) {
+            if (slot != null && slot.container != null) {
+                if (slot.container instanceof BlockEntity || slot.container instanceof CompoundContainer) {
+                    return slot.container;
+                }
+            }
+        }
+        return null;
     }
 
     private String getItemIdentifier(Item item) {
