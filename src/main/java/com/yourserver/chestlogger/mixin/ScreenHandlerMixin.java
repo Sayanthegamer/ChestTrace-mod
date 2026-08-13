@@ -159,20 +159,19 @@ public abstract class ScreenHandlerMixin {
 
     private String getItemIdentifier(Item item) {
         if (item == null) return "minecraft:air";
+
         try {
             Object loc = BuiltInRegistries.ITEM.getKey(item);
             if (loc != null) return loc.toString();
-        } catch (Throwable t) {
-            try {
-                for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
-                    if (m.getName().equals("getKey") && m.getParameterCount() == 1) {
-                        Object res = m.invoke(BuiltInRegistries.ITEM, item);
-                        if (res != null) return res.toString();
-                    }
-                }
-            } catch (Throwable ignored) {}
-        }
-        return item.toString();
+        } catch (Throwable ignored) {}
+
+        try {
+            Object loc = item.builtInRegistryHolder().key().location();
+            if (loc != null) return loc.toString();
+        } catch (Throwable ignored) {}
+
+        ChestLoggerMod.LOGGER.error("ChestLogger: Failed to resolve item identifier for item class {}; defaulting to minecraft:air to avoid logging an unparseable object string", item.getClass().getName());
+        return "minecraft:air";
     }
 
     private BlockPos getBlockPosFromContainer(Container container) {

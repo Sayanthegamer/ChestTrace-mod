@@ -378,46 +378,14 @@ public final class ChestLogGui implements MenuProvider {
         try {
             ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
             if (id != null) {
-                Object res = BuiltInRegistries.ITEM.get(id);
-                Item resolved = extractItemFromObject(res);
-                if (resolved != null && resolved != Items.AIR) return resolved;
-
-                res = BuiltInRegistries.ITEM.getValue(id);
-                resolved = extractItemFromObject(res);
+                Item resolved = BuiltInRegistries.ITEM.getValue(id);
                 if (resolved != null && resolved != Items.AIR) return resolved;
             }
         } catch (Throwable t) {
-            ChestLoggerMod.LOGGER.warn("Primary registry lookup exception for {}: {}", itemIdStr, t.getMessage());
-        }
-
-        try {
-            for (Item item : BuiltInRegistries.ITEM) {
-                if (item == null || item == Items.AIR) continue;
-                Object keyObj = BuiltInRegistries.ITEM.getKey(item);
-                if (keyObj != null && itemIdStr.equals(keyObj.toString())) {
-                    return item;
-                }
-            }
-        } catch (Throwable t) {
-            ChestLoggerMod.LOGGER.warn("Iteration registry lookup exception for {}: {}", itemIdStr, t.getMessage());
+            ChestLoggerMod.LOGGER.warn("Registry lookup exception for {}: {}", itemIdStr, t.getMessage());
         }
 
         return Items.BARRIER;
-    }
-
-    private static Item extractItemFromObject(Object obj) {
-        if (obj == null) return null;
-        if (obj instanceof Item item) {
-            return item;
-        }
-        if (obj instanceof java.util.Optional<?> opt) {
-            return opt.isPresent() ? extractItemFromObject(opt.get()) : null;
-        }
-        if (obj instanceof net.minecraft.core.Holder<?> holder) {
-            Object val = holder.value();
-            if (val instanceof Item item) return item;
-        }
-        return null;
     }
 
     private String getItemDisplayName(Item item) {

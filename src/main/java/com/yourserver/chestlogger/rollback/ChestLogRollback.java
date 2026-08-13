@@ -33,20 +33,19 @@ public final class ChestLogRollback {
 
     private static String getItemIdentifier(Item item) {
         if (item == null) return "minecraft:air";
+
         try {
             Object loc = BuiltInRegistries.ITEM.getKey(item);
             if (loc != null) return loc.toString();
-        } catch (Throwable t) {
-            try {
-                for (java.lang.reflect.Method m : BuiltInRegistries.ITEM.getClass().getMethods()) {
-                    if (m.getName().equals("getKey") && m.getParameterCount() == 1) {
-                        Object res = m.invoke(BuiltInRegistries.ITEM, item);
-                        if (res != null) return res.toString();
-                    }
-                }
-            } catch (Throwable ignored) {}
-        }
-        return item.toString();
+        } catch (Throwable ignored) {}
+
+        try {
+            Object loc = item.builtInRegistryHolder().key().location();
+            if (loc != null) return loc.toString();
+        } catch (Throwable ignored) {}
+
+        ChestLoggerMod.LOGGER.error("ChestLogger: Failed to resolve item identifier for item class {}; defaulting to minecraft:air to avoid logging an unparseable object string", item.getClass().getName());
+        return "minecraft:air";
     }
 
     private static Item getItemFromIdentifier(String itemIdStr) {
@@ -57,41 +56,13 @@ public final class ChestLogRollback {
         try {
             ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
             if (id != null) {
-                Object res = BuiltInRegistries.ITEM.get(id);
-                Item resolved = extractItemFromObject(res);
-                if (resolved != null && resolved != Items.AIR) return resolved;
-
-                res = BuiltInRegistries.ITEM.getValue(id);
-                resolved = extractItemFromObject(res);
+                Item resolved = BuiltInRegistries.ITEM.getValue(id);
                 if (resolved != null && resolved != Items.AIR) return resolved;
             }
-        } catch (Throwable ignored) {}
-
-        try {
-            for (Item item : BuiltInRegistries.ITEM) {
-                if (item == null || item == Items.AIR) continue;
-                Object keyObj = BuiltInRegistries.ITEM.getKey(item);
-                if (keyObj != null && itemIdStr.equals(keyObj.toString())) {
-                    return item;
-                }
-            }
-        } catch (Throwable ignored) {}
-
-        return null;
-    }
-
-    private static Item extractItemFromObject(Object obj) {
-        if (obj == null) return null;
-        if (obj instanceof Item item) {
-            return item;
+        } catch (Throwable t) {
+            ChestLoggerMod.LOGGER.warn("Registry lookup exception for {}: {}", itemIdStr, t.getMessage());
         }
-        if (obj instanceof java.util.Optional<?> opt) {
-            return opt.isPresent() ? extractItemFromObject(opt.get()) : null;
-        }
-        if (obj instanceof net.minecraft.core.Holder<?> holder) {
-            Object val = holder.value();
-            if (val instanceof Item item) return item;
-        }
+
         return null;
     }
 
