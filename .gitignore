@@ -3,6 +3,7 @@
 build/
 out/
 bin/
+!gradle/wrapper/gradle-wrapper.jar
 
 # Minecraft Fabric Loom test environment files
 run/
