@@ -43,7 +43,7 @@ public abstract class ScreenHandlerMixin {
     ) {}
 
     @Inject(method = "clicked", at = @At("HEAD"), cancellable = true)
-    private void onSlotClickIntercept(int slotIndex, int button, @Coerce Object clickType, Player player, CallbackInfo ci) {
+    private void onSlotClickIntercept(int slotIndex, int button, ClickType clickType, Player player, CallbackInfo ci) {
         AbstractContainerMenu menu = (AbstractContainerMenu) (Object) this;
 
         // --- GUI Click Protection & Control Handling for ChestLogMenu ---
@@ -68,10 +68,9 @@ public abstract class ScreenHandlerMixin {
         if (pos == null) return;
 
         byte flags = 0;
-        String clickStr = clickType != null ? clickType.toString() : "";
-        if (clickStr.contains("QUICK_MOVE")) {
+        if (clickType == ClickType.QUICK_MOVE) {
             flags |= ChestLogEvent.Flags.SHIFT_CLICK;
-        } else if (clickStr.contains("QUICK_CRAFT") || clickStr.contains("DRAG")) {
+        } else if (clickType == ClickType.QUICK_CRAFT || clickType == ClickType.CLONE) {
             flags |= ChestLogEvent.Flags.DRAG;
         }
 
@@ -89,7 +88,7 @@ public abstract class ScreenHandlerMixin {
     }
 
     @Inject(method = "clicked", at = @At("TAIL"))
-    private void onSlotClickTail(int slotIndex, int button, @Coerce Object clickType, Player player, CallbackInfo ci) {
+    private void onSlotClickTail(int slotIndex, int button, ClickType clickType, Player player, CallbackInfo ci) {
         PendingClickSnapshot snapshot = PENDING_SNAPSHOT.get();
         PENDING_SNAPSHOT.remove();
 
