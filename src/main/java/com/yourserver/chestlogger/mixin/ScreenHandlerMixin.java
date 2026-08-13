@@ -116,22 +116,27 @@ public abstract class ScreenHandlerMixin {
             if (oldStack.isEmpty() && !newStack.isEmpty()) {
                 String itemId = getItemIdentifier(newStack.getItem());
                 int countDiff = newStack.getCount();
+                ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click: +{} x {} at {}", countDiff, itemId, snapshot.pos.toShortString());
                 writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags));
             } else if (!oldStack.isEmpty() && newStack.isEmpty()) {
                 String itemId = getItemIdentifier(oldStack.getItem());
                 int countDiff = -oldStack.getCount();
+                ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click: {} x {} at {}", countDiff, itemId, snapshot.pos.toShortString());
                 writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, countDiff, snapshot.flags));
             } else if (ItemStack.isSameItemSameComponents(oldStack, newStack)) {
                 int diff = newStack.getCount() - oldStack.getCount();
                 if (diff != 0) {
                     String itemId = getItemIdentifier(newStack.getItem());
+                    ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click: {}{} x {} at {}", diff > 0 ? "+" : "", diff, itemId, snapshot.pos.toShortString());
                     writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, itemId, diff, snapshot.flags));
                 }
             } else {
                 String oldItemId = getItemIdentifier(oldStack.getItem());
+                ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click swap remove: -{} x {} at {}", oldStack.getCount(), oldItemId, snapshot.pos.toShortString());
                 writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, oldItemId, -oldStack.getCount(), snapshot.flags));
 
                 String newItemId = getItemIdentifier(newStack.getItem());
+                ChestLoggerMod.LOGGER.info("[ChestLogger] Slot click swap add: +{} x {} at {}", newStack.getCount(), newItemId, snapshot.pos.toShortString());
                 writer.enqueue(new ChestLogEvent(timestamp, txId, player.getUUID(), packedPos, newItemId, newStack.getCount(), snapshot.flags));
             }
         }

@@ -66,6 +66,7 @@ public final class ChestLogWriter {
             }
             return;
         }
+        LOGGER.info("ChestLogger: Writer enqueued event for pos=" + event.packedBlockPos + ", item=" + event.itemId + ", diff=" + event.countDiff);
         queue.offer(event);
     }
 
