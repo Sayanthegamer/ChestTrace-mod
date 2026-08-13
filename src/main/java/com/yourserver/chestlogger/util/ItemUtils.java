@@ -1,5 +1,6 @@
 package com.yourserver.chestlogger.util;
 
+import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.BlockItem;
@@ -17,25 +18,28 @@ public final class ItemUtils {
             return "minecraft:air";
         }
 
+        // 1. Canonical BlockItem fallback (Safe Path Comparison)
         if (item instanceof BlockItem blockItem) {
             try {
                 Block block = blockItem.getBlock();
                 if (block != null) {
                     ResourceLocation blockLoc = BuiltInRegistries.BLOCK.getKey(block);
-                    if (blockLoc != null && !blockLoc.equals(BuiltInRegistries.BLOCK.getDefaultKey())) {
+                    if (blockLoc != null && !blockLoc.getPath().equals("air")) {
                         return blockLoc.toString();
                     }
                 }
             } catch (Throwable ignored) {}
         }
 
+        // 2. Standard Item lookup (Safe Path Comparison)
         try {
             ResourceLocation loc = BuiltInRegistries.ITEM.getKey(item);
-            if (loc != null && !loc.equals(BuiltInRegistries.ITEM.getDefaultKey())) {
+            if (loc != null && !loc.getPath().equals("air")) {
                 return loc.toString();
             }
         } catch (Throwable ignored) {}
 
+        // 3. Fallback to built-in holder
         try {
             if (item.builtInRegistryHolder() != null && item.builtInRegistryHolder().isBound()) {
                 return item.builtInRegistryHolder().key().location().toString();
@@ -77,15 +81,15 @@ public final class ItemUtils {
         }
     }
 
-    public static net.minecraft.core.component.DataComponentPatch extractComponents(ItemStack stack) {
-        if (stack == null || stack.isEmpty()) return net.minecraft.core.component.DataComponentPatch.EMPTY;
+    public static DataComponentPatch extractComponents(ItemStack stack) {
+        if (stack == null || stack.isEmpty()) return DataComponentPatch.EMPTY;
         return stack.getComponentsPatch();
     }
 
-    public static byte[] serializeComponents(net.minecraft.core.component.DataComponentPatch patch, net.minecraft.core.HolderLookup.Provider registryAccess) {
+    public static byte[] serializeComponents(DataComponentPatch patch, net.minecraft.core.HolderLookup.Provider registryAccess) {
         if (patch == null || patch.isEmpty() || registryAccess == null) return null;
         try {
-            net.minecraft.nbt.Tag tag = net.minecraft.core.component.DataComponentPatch.CODEC.encodeStart(
+            net.minecraft.nbt.Tag tag = DataComponentPatch.CODEC.encodeStart(
                 net.minecraft.resources.RegistryOps.create(net.minecraft.nbt.NbtOps.INSTANCE, registryAccess),
                 patch
             ).getOrThrow();
@@ -99,17 +103,17 @@ public final class ItemUtils {
         }
     }
 
-    public static net.minecraft.core.component.DataComponentPatch deserializeComponents(byte[] bytes, net.minecraft.core.HolderLookup.Provider registryAccess) {
-        if (bytes == null || bytes.length == 0 || registryAccess == null) return net.minecraft.core.component.DataComponentPatch.EMPTY;
+    public static DataComponentPatch deserializeComponents(byte[] bytes, net.minecraft.core.HolderLookup.Provider registryAccess) {
+        if (bytes == null || bytes.length == 0 || registryAccess == null) return DataComponentPatch.EMPTY;
         try {
             java.io.DataInputStream dis = new java.io.DataInputStream(new java.io.ByteArrayInputStream(bytes));
             net.minecraft.nbt.Tag tag = net.minecraft.nbt.NbtIo.readAnyTag(dis, net.minecraft.nbt.NbtAccounter.unlimitedHeap());
-            return net.minecraft.core.component.DataComponentPatch.CODEC.parse(
+            return DataComponentPatch.CODEC.parse(
                 net.minecraft.resources.RegistryOps.create(net.minecraft.nbt.NbtOps.INSTANCE, registryAccess),
                 tag
             ).getOrThrow();
         } catch (Throwable t) {
-            return net.minecraft.core.component.DataComponentPatch.EMPTY;
+            return DataComponentPatch.EMPTY;
         }
     }
 }
