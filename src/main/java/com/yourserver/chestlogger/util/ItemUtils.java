@@ -1,6 +1,6 @@
 package com.yourserver.chestlogger.util;
 
-import com.yourserver.chestlogger.ChestLoggerMod;
+import net.minecraft.core.Registry;
 import net.minecraft.core.component.DataComponentPatch;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -14,49 +14,37 @@ public final class ItemUtils {
 
     private ItemUtils() {}
 
+    @SuppressWarnings("unchecked")
     public static String getItemIdentifier(Item item) {
         if (item == null || item == Items.AIR) {
             return "minecraft:air";
         }
 
-        // 1. Canonical BlockItem fallback (Safe Path Comparison)
+        // 1. Canonical BlockItem fallback (Forced Interface Cast)
         if (item instanceof BlockItem blockItem) {
             try {
                 Block block = blockItem.getBlock();
                 if (block != null) {
-                    ResourceLocation blockLoc = BuiltInRegistries.BLOCK.getKey(block);
+                    ResourceLocation blockLoc = ((Registry<Block>) BuiltInRegistries.BLOCK).getKey(block);
                     if (blockLoc != null && !blockLoc.getPath().equals("air")) {
                         return blockLoc.toString();
                     }
                 }
-            } catch (Throwable e) {
-                ChestLoggerMod.LOGGER.error("Identifier resolution crashed during BlockItem lookup for item class {}: ", item.getClass().getName(), e);
-            }
+            } catch (Throwable ignored) {}
         }
 
-        // 2. Standard Item lookup (Safe Path Comparison)
+        // 2. Standard Item lookup (Forced Interface Cast)
         try {
-            ResourceLocation loc = BuiltInRegistries.ITEM.getKey(item);
+            ResourceLocation loc = ((Registry<Item>) BuiltInRegistries.ITEM).getKey(item);
             if (loc != null && !loc.getPath().equals("air")) {
                 return loc.toString();
             }
-        } catch (Throwable e) {
-            ChestLoggerMod.LOGGER.error("Identifier resolution crashed during Item lookup for item class {}: ", item.getClass().getName(), e);
-        }
+        } catch (Throwable ignored) {}
 
-        // 3. Fallback to built-in holder
-        try {
-            if (item.builtInRegistryHolder() != null && item.builtInRegistryHolder().isBound()) {
-                return item.builtInRegistryHolder().key().location().toString();
-            }
-        } catch (Throwable e) {
-            ChestLoggerMod.LOGGER.error("Identifier resolution crashed during builtInRegistryHolder lookup for item class {}: ", item.getClass().getName(), e);
-        }
-
-        ChestLoggerMod.LOGGER.error("ChestLogger: Failed to resolve item identifier for item class {}; defaulting to minecraft:air to avoid logging an unparseable object string", item.getClass().getName());
         return "minecraft:air";
     }
 
+    @SuppressWarnings("unchecked")
     public static Item getItemFromIdentifier(String itemIdStr, Item fallback) {
         if (itemIdStr == null || itemIdStr.isEmpty() || itemIdStr.equals("minecraft:air")) {
             return fallback;
@@ -65,19 +53,17 @@ public final class ItemUtils {
         try {
             ResourceLocation id = ResourceLocation.tryParse(itemIdStr);
             if (id != null) {
-                Item resolved = BuiltInRegistries.ITEM.getValue(id);
+                Item resolved = ((Registry<Item>) BuiltInRegistries.ITEM).getValue(id);
                 if (resolved != null && resolved != Items.AIR) {
                     return resolved;
                 }
 
-                Block block = BuiltInRegistries.BLOCK.getValue(id);
+                Block block = ((Registry<Block>) BuiltInRegistries.BLOCK).getValue(id);
                 if (block != null && block.asItem() != null && block.asItem() != Items.AIR) {
                     return block.asItem();
                 }
             }
-        } catch (Throwable e) {
-            ChestLoggerMod.LOGGER.error("getItemFromIdentifier failed for {}: ", itemIdStr, e);
-        }
+        } catch (Throwable ignored) {}
 
         return fallback;
     }
